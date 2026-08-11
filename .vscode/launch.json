@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "qouta_calculator",
+      "request": "launch",
+      "type": "dart",
+      "toolArgs": ["--dart-define=use_arabic=true"]
+    },
+    {
+      "name": "qouta_calculator (profile mode)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "profile",
+      "toolArgs": ["--dart-define=use_arabic=true"]
+    },
+    {
+      "name": "qouta_calculator (release mode)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "release",
+      "toolArgs": ["--dart-define=use_arabic=true"]
+    }
+  ]
+}
