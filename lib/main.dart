@@ -218,7 +218,8 @@ class AppLocalizations {
   String get confirmDeleteMessage => isArabic ? 'هل أنت متأكد من حذف هذا العنصر؟ لا يمكن التراجع عن هذا الإجراء.' : 'Are you sure you want to delete this? This cannot be undone.';
   // PDF table
   String get tableDescription => isArabic ? 'البيان' : 'Description';
-  String get tableAmount => isArabic ? 'المبلغ (\$)' : 'Amount (\$)';
+  String get currencySymbol => isArabic ? 'د.إ' : 'AED';
+  String get tableAmount => isArabic ? 'المبلغ ($currencySymbol)' : 'Amount ($currencySymbol)';
   String get customerName => isArabic ? 'اسم العميل' : 'Customer Name';
   String get roomQuantity => isArabic ? 'العدد' : 'Quantity';
   String get pricePerMonth => isArabic ? 'السعر الشهري' : 'Price / Month';
@@ -665,7 +666,11 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
       _cameraAmount = camera;
       _depositAmount = deposit;
       _finalPrice = calculateFinalPrice(_yearlyPrice, _vatAmount, cd, camera, _managementFeeAmount, deposit);
-      _payments = splitPayments(_finalPrice, numberOfPayments: _numberOfPayments);
+      // Insurance/deposit, C.D, management fee + its VAT, and camera are all
+      // collected upfront with the first installment; only the rent itself
+      // (the rooms payment) is spread evenly across the installments.
+      final firstPaymentExtra = _vatAmount + cd + camera + _managementFeeAmount + deposit;
+      _payments = splitPayments(_yearlyPrice, numberOfPayments: _numberOfPayments, firstPaymentExtra: firstPaymentExtra);
     });
   }
 
@@ -1007,25 +1012,25 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     children: [
-                      _buildResultRow('${strings.yearlyRent}:', '${formatAmount(_yearlyPrice)} \$'),
+                      _buildResultRow('${strings.yearlyRent}:', '${formatAmount(_yearlyPrice)} ${strings.currencySymbol}'),
                       _buildResultRow(
                         '${strings.managementFee} (${formatFieldValue(double.tryParse(_managementController.text) ?? 0)}%):',
-                        '${formatAmount(_managementFeeAmount)} \$',
+                        '${formatAmount(_managementFeeAmount)} ${strings.currencySymbol}',
                       ),
                       _buildResultRow(
                         '${strings.managementVat} (${formatFieldValue(double.tryParse(_vatPercentController.text) ?? 0)}%):',
-                        '${formatAmount(_vatAmount)} \$',
+                        '${formatAmount(_vatAmount)} ${strings.currencySymbol}',
                       ),
-                      if (_includeCd) _buildResultRow('${strings.cdCharge}:', '${formatAmount(_cdAmount)} \$'),
-                      if (_includeCamera) _buildResultRow('${strings.cameraFee}:', '${formatAmount(_cameraAmount)} \$'),
-                      _buildResultRow('${strings.refundableDeposit}:', '${formatAmount(_depositAmount)} \$'),
+                      if (_includeCd) _buildResultRow('${strings.cdCharge}:', '${formatAmount(_cdAmount)} ${strings.currencySymbol}'),
+                      if (_includeCamera) _buildResultRow('${strings.cameraFee}:', '${formatAmount(_cameraAmount)} ${strings.currencySymbol}'),
+                      _buildResultRow('${strings.refundableDeposit}:', '${formatAmount(_depositAmount)} ${strings.currencySymbol}'),
                       const Divider(),
-                      _buildResultRow('${strings.finalPrice}:', '${formatAmount(_finalPrice)} \$', isBold: true),
+                      _buildResultRow('${strings.finalPrice}:', '${formatAmount(_finalPrice)} ${strings.currencySymbol}', isBold: true),
                       const Divider(),
                       for (var i = 0; i < _payments.length; i++)
                         _buildResultRow(
                           '${_payments.length == 1 ? strings.singlePayment : strings.paymentLabel(i)}:',
-                          '${formatAmount(_payments[i])} \$',
+                          '${formatAmount(_payments[i])} ${strings.currencySymbol}',
                         ),
                     ],
                   ),
@@ -1141,6 +1146,23 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
                       cdUnit: 100,
                       cameraUnit: 112,
                       depositUnit: 1500,
+                    ),
+                    buildCalculationExample(
+                      strings,
+                      title: strings.isArabic
+                          ? 'مثال 5: 7 غرف بثلاث دفعات (التأمين والدفاع المدني والإدارة والفات والكاميرا كلها مع الدفعة الأولى)'
+                          : 'Example 5: 7 rooms in 3 payments (deposit, C.D, management, its VAT & camera all bundled into payment 1)',
+                      priceMonth: 2800,
+                      service: 0,
+                      quantity: 7,
+                      managementPercent: 10,
+                      vatPercent: 5,
+                      includeCd: true,
+                      includeCamera: true,
+                      cdUnit: 100,
+                      cameraUnit: 112,
+                      depositUnit: 1500,
+                      numberOfPayments: 3,
                     ),
                     const SizedBox(height: 8),
                     Align(
@@ -1492,6 +1514,7 @@ Widget buildCalculationExample(
   required double cdUnit,
   required double cameraUnit,
   required double depositUnit,
+  int? numberOfPayments,
 }) {
   final yearly = calculateBaseYearlyPrice(priceMonth, service, quantity);
   final managementFee = calculateManagementFee(yearly, managementPercent);
@@ -1511,6 +1534,20 @@ Widget buildCalculationExample(
     '${strings.refundableDeposit} = ${formatAmount(deposit)}',
     '${strings.finalPrice} = ${formatAmount(finalPrice)}',
   ];
+
+  if (numberOfPayments != null) {
+    final firstPaymentExtra = vat + cd + camera + managementFee + deposit;
+    final payments = splitPayments(
+      yearly,
+      numberOfPayments: numberOfPayments,
+      firstPaymentExtra: firstPaymentExtra,
+    );
+    for (var i = 0; i < payments.length; i++) {
+      lines.add(
+        '${payments.length == 1 ? strings.singlePayment : strings.paymentLabel(i)} = ${formatAmount(payments[i])}',
+      );
+    }
+  }
 
   return Container(
     margin: const EdgeInsets.only(bottom: 12),
@@ -1533,16 +1570,23 @@ Widget buildCalculationExample(
   );
 }
 
-/// Splits [finalPrice] into [numberOfPayments] equal installments. The last
-/// installment absorbs any rounding remainder so the payments always sum
-/// exactly to [finalPrice].
-List<double> splitPayments(double finalPrice, {required int numberOfPayments}) {
+/// Splits [baseAmount] (the rent/rooms portion) into [numberOfPayments]
+/// equal installments, then adds [firstPaymentExtra] (deposit, C.D, camera,
+/// management fee, and its VAT — everything collected upfront) onto the
+/// first installment. The last installment absorbs any rounding remainder
+/// so the payments always sum exactly to `baseAmount + firstPaymentExtra`.
+List<double> splitPayments(
+  double baseAmount, {
+  required int numberOfPayments,
+  double firstPaymentExtra = 0,
+}) {
   final n = numberOfPayments < 1 ? 1 : numberOfPayments;
   if (n == 1) {
-    return [finalPrice];
+    return [baseAmount + firstPaymentExtra];
   }
-  final each = finalPrice / n;
+  final each = baseAmount / n;
   final payments = List<double>.generate(n - 1, (_) => each);
-  payments.add(finalPrice - each * (n - 1));
+  payments.add(baseAmount - each * (n - 1));
+  payments[0] += firstPaymentExtra;
   return payments;
 }

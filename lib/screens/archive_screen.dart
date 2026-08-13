@@ -144,7 +144,7 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
                                 Text(quotation.customerName, style: const TextStyle(fontSize: 16)),
                                 const SizedBox(height: 4),
                                 Text(
-                                  '${strings.finalPrice}: ${formatAmount(quotation.finalPrice)} \$',
+                                  '${strings.finalPrice}: ${formatAmount(quotation.finalPrice)} ${strings.currencySymbol}',
                                   style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade900),
                                 ),
                                 const SizedBox(height: 4),

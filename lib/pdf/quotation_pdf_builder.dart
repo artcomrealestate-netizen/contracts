@@ -246,7 +246,7 @@ Future<Uint8List> buildQuotationPdfBytes({
                                   style: const pw.TextStyle(fontSize: 12),
                                 ),
                                 pw.SizedBox(width: 4),
-                                pw.Text('${formatAmount(entry.value)} \$', style: const pw.TextStyle(fontSize: 13)),
+                                pw.Text('${formatAmount(entry.value)} ${strings.currencySymbol}', style: const pw.TextStyle(fontSize: 13)),
                               ],
                             ),
                           ),

@@ -91,6 +91,17 @@ void main() {
       expect(splitPayments(500, numberOfPayments: 0), [500]);
       expect(splitPayments(500, numberOfPayments: -1), [500]);
     });
+
+    test('firstPaymentExtra (deposit, C.D, camera, management fee + VAT) is added only to the first installment', () {
+      // Rent (rooms) of 12000 split 3 ways, with 3000 of upfront fees bundled into payment 1.
+      final payments = splitPayments(12000, numberOfPayments: 3, firstPaymentExtra: 3000);
+      expect(payments, [7000, 4000, 4000]);
+      expect(payments.reduce((a, b) => a + b), 15000);
+    });
+
+    test('firstPaymentExtra is folded into the single payment when only one installment is chosen', () {
+      expect(splitPayments(12000, numberOfPayments: 1, firstPaymentExtra: 3000), [15000]);
+    });
   });
 
   group('Dynamic notes generation', () {

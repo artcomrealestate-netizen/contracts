@@ -126,8 +126,8 @@ void main() {
     await tester.enterText(depositField, '0');
     await tester.pumpAndSettle();
 
-    expect(find.text('24,000 \$'), findsNWidgets(2));
-    expect(find.text('12,000 \$'), findsWidgets);
+    expect(find.text('24,000 AED'), findsNWidgets(2));
+    expect(find.text('12,000 AED'), findsWidgets);
     expect(find.text('Payment 1:'), findsOneWidget);
     expect(find.text('Payment 2:'), findsOneWidget);
   });
@@ -145,7 +145,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Yearly = (1000 rent + 500 service) * 12 * 1 room = 18000. No management % set, so final = yearly.
-    expect(find.text('18,000 \$'), findsWidgets);
+    expect(find.text('18,000 AED'), findsWidgets);
   });
 
   testWidgets('Payment split updates when two payments selected', (WidgetTester tester) async {
@@ -166,8 +166,8 @@ void main() {
     await tester.enterText(depositField, '0');
     await tester.pumpAndSettle();
 
-    expect(find.text('12,012 \$'), findsWidgets);
-    expect(find.text('6,006 \$'), findsNWidgets(2));
+    expect(find.text('12,012 AED'), findsWidgets);
+    expect(find.text('6,006 AED'), findsNWidgets(2));
   });
 
   testWidgets('Selecting a different number of payments splits the total into that many rows', (WidgetTester tester) async {
@@ -182,7 +182,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Base yearly price = 12000, default is 2 equal payments of 6000 each.
-    expect(find.text('6,000 \$'), findsNWidgets(2));
+    expect(find.text('6,000 AED'), findsNWidgets(2));
 
     await tester.ensureVisible(find.byKey(const Key('numberOfPaymentsDropdown')));
     await tester.tap(find.byKey(const Key('numberOfPaymentsDropdown')));
@@ -193,7 +193,7 @@ void main() {
     expect(find.text('Payment 1:'), findsOneWidget);
     expect(find.text('Payment 2:'), findsOneWidget);
     expect(find.text('Payment 3:'), findsOneWidget);
-    expect(find.text('4,000 \$'), findsNWidgets(3));
+    expect(find.text('4,000 AED'), findsNWidgets(3));
   });
 
   testWidgets(
@@ -210,7 +210,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Yearly = 1000 * 12 * 1 = 12000; plus C.D 100 + Camera 50 = 12150.
-      expect(find.text('12,150 \$'), findsOneWidget);
+      expect(find.text('12,150 AED'), findsOneWidget);
       expect(find.byKey(const Key('cd')), findsOneWidget);
       expect(find.byKey(const Key('camera')), findsOneWidget);
 
@@ -222,7 +222,7 @@ void main() {
       expect(find.byKey(const Key('cd')), findsNothing);
       expect(find.byKey(const Key('camera')), findsOneWidget);
       // Yearly 12000 + Camera 50 = 12050.
-      expect(find.text('12,050 \$'), findsOneWidget);
+      expect(find.text('12,050 AED'), findsOneWidget);
 
       // Now also uncheck Camera - both fields gone, total back to base yearly.
       await tester.ensureVisible(find.byKey(const Key('includeCameraCheckbox')));
@@ -231,7 +231,7 @@ void main() {
 
       expect(find.byKey(const Key('cd')), findsNothing);
       expect(find.byKey(const Key('camera')), findsNothing);
-      expect(find.text('12,000 \$'), findsNWidgets(2));
+      expect(find.text('12,000 AED'), findsNWidgets(2));
     },
   );
 
@@ -247,8 +247,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // Yearly = 1000 * 12 * 2 = 24000; deposit is per-room: 1500 * 2 rooms = 3000.
-    expect(find.text('3,000 \$'), findsOneWidget);
-    expect(find.text('27,000 \$'), findsOneWidget);
+    expect(find.text('3,000 AED'), findsOneWidget);
+    expect(find.text('27,000 AED'), findsOneWidget);
   });
 
   testWidgets('New Quotation button clears the form for the next customer', (WidgetTester tester) async {
@@ -272,7 +272,7 @@ void main() {
     final vatField = tester.widget<TextField>(find.byKey(const Key('vatPercent')));
     expect(vatField.controller!.text, '5');
 
-    expect(find.text('0 \$'), findsWidgets);
+    expect(find.text('0 AED'), findsWidgets);
   });
 
   testWidgets('PDF share is invoked when export button is tapped', (WidgetTester tester) async {
