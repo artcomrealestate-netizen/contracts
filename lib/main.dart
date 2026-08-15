@@ -225,8 +225,8 @@ class AppLocalizations {
   String get pricePerMonth => isArabic ? 'السعر الشهري' : 'Price / Month';
   String get managementFee => isArabic ? 'نسبة الإدارة %' : 'Management Fee %';
   String get managementVat => isArabic ? 'الضريبة الإدارية' : 'Management VAT';
-  String get cdCharge => isArabic ? 'رسوم الدفاع المدني (للوحدة)' : 'C.D Charge (per unit)';
-  String get cameraFee => isArabic ? 'رسوم الكاميرا (للوحدة)' : 'Camera Fee (per unit)';
+  String get cdCharge => isArabic ? 'رسوم الدفاع المدني (سنوي، للوحدة)' : 'C.D Charge (annual, per unit)';
+  String get cameraFee => isArabic ? 'رسوم الكاميرا (سنوي، للوحدة)' : 'Camera Fee (annual, per unit)';
   String get contractTypeLabel => isArabic ? 'نوع العقد' : 'Contract Type';
   String get residentialContract => isArabic ? 'سكني' : 'Residential';
   String get commercialContract => isArabic ? 'تجاري / صناعي' : 'Commercial / Industrial';
@@ -238,13 +238,13 @@ class AppLocalizations {
       ? '1. إجمالي الإيجار = (السعر الشهري + الخدمات الشهرية) × مدة العقد بالأشهر × عدد الغرف — مش لازم تكون سنة كاملة، فيك تحطي 3 أو 6 أو 9 أشهر وبتنحسب صح.\n'
         '2. رسوم الإدارة = إجمالي الإيجار × نسبة الإدارة % (تُكتب حسب كل عرض سعر).\n'
         '3. الضريبة الإدارية = رسوم الإدارة × نسبة الضريبة % (افتراضي 5%، وقابلة للتعديل).\n'
-        '4. الدفاع المدني = سعر الوحدة × عدد الغرف، والكاميرا نفس الشي — كل وحدة منهم إلها checkbox مستقل خاص فيها ("تضمين رسوم الدفاع المدني" و"تضمين رسوم الكاميرا")، فيك تفعّلي وحدة وتلغي التانية، ومنفصلين تماماً عن نوع العقد (سكني/تجاري).\n'
+        '4. الدفاع المدني = سعر الوحدة السنوي × (مدة العقد بالأشهر ÷ 12) × عدد الغرف، والكاميرا نفس الشي — هني رسوم سنوية، فعقد أقصر من سنة بياخذ بس النسبة المتناسبة معه (متلاً عقد 9 أشهر بياخذ 9/12 من الرسم السنوي). كل وحدة منهم إلها checkbox مستقل خاص فيها ("تضمين رسوم الدفاع المدني" و"تضمين رسوم الكاميرا")، فيك تفعّلي وحدة وتلغي التانية، ومنفصلين تماماً عن نوع العقد (سكني/تجاري). الوديعة المستردة وحدها ما بتتناسب مع الأشهر، لأنها مبلغ ثابت لمرة وحدة.\n'
         '5. السعر النهائي = إجمالي الإيجار + رسوم الإدارة + الضريبة الإدارية + الدفاع المدني + الكاميرا + الوديعة المستردة.\n'
         '6. الدفعات: التأمين والدفاع المدني والكاميرا ورسوم الإدارة وضريبتها كلها بتنحط مع الدفعة الأولى، وباقي إجمالي الإيجار بس بينقسم بالتساوي على باقي الدفعات.'
       : '1. Rent Total = (Price/Month + Monthly Services) × Contract Period (Months) × Quantity — it does not have to be a full year; enter 3, 6, or 9 months and it calculates correctly.\n'
         '2. Management Fee = Rent Total × Management % (entered per quotation).\n'
         '3. Management VAT = Management Fee × VAT % (defaults to 5%, editable).\n'
-        '4. C.D = Unit Price × Quantity, and Camera the same way — each has its own independent checkbox ("Include Civil Defense fee" / "Include Camera fee"), so you can turn one on and the other off, fully separate from Contract Type (residential/commercial).\n'
+        '4. C.D = Annual Unit Price × (Contract Period in Months ÷ 12) × Quantity, and Camera the same way — these are annual fees, so a contract shorter than a year only bills the matching fraction (e.g. a 9-month contract bills 9/12 of the annual rate). Each has its own independent checkbox ("Include Civil Defense fee" / "Include Camera fee"), so you can turn one on and the other off, fully separate from Contract Type (residential/commercial). The Refundable Deposit alone is not prorated by months, since it is a one-time flat amount.\n'
         '5. Final Price = Rent Total + Management Fee + Management VAT + C.D + Camera + Refundable Deposit.\n'
         '6. Payments: the deposit, C.D, camera, management fee, and its VAT are all bundled into the first payment; only the remaining Rent Total is split evenly across the rest of the payments.';
   String get serviceCharge => isArabic ? 'الخدمات (شهرياً)' : 'Services (Monthly)';
@@ -497,10 +497,13 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
       _includeCamera = quotation.includeCamera;
       _priceMonthController.text = formatFieldValue(quotation.priceMonth);
       // quotation.cd/camera are the frozen historical totals; the input
-      // fields expect a per-unit price, so divide back out by quantity.
+      // fields expect an annual per-unit price, so divide back out by both
+      // quantity and the months fraction that was applied when they were
+      // first prorated (see calculateProratedFee) to recover that rate.
       final unitDivisor = quotation.quantity > 0 ? quotation.quantity : 1;
-      _cdController.text = formatFieldValue(quotation.cd / unitDivisor);
-      _cameraController.text = formatFieldValue(quotation.camera / unitDivisor);
+      final monthsFraction = quotation.contractMonths / 12;
+      _cdController.text = formatFieldValue(quotation.cd / (unitDivisor * monthsFraction));
+      _cameraController.text = formatFieldValue(quotation.camera / (unitDivisor * monthsFraction));
       _serviceController.text = formatFieldValue(quotation.service);
       _managementController.text = formatFieldValue(quotation.managementPercent);
       _vatPercentController.text = formatFieldValue(quotation.vatPercent);
@@ -676,8 +679,8 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
       final vatPercent = clampNonNegative(_vatPercentController.text);
       final depositUnit = clampNonNegative(_depositController.text);
       _contractMonths = clampMinOne(_contractMonthsController.text).toInt();
-      final cd = _includeCd ? cdUnit * qty : 0.0;
-      final camera = _includeCamera ? cameraUnit * qty : 0.0;
+      final cd = _includeCd ? calculateProratedFee(cdUnit, _contractMonths, qty) : 0.0;
+      final camera = _includeCamera ? calculateProratedFee(cameraUnit, _contractMonths, qty) : 0.0;
       final deposit = depositUnit * qty;
       _yearlyPrice = calculateBasePrice(priceMonth, service, qty.toInt(), months: _contractMonths);
       _managementFeeAmount = calculateManagementFee(_yearlyPrice, managementPercent);
@@ -1591,6 +1594,16 @@ double calculateBasePrice(double priceMonth, double service, int quantity, {int 
   return (priceMonth + service) * months * quantity;
 }
 
+/// Civil defense and camera fees are quoted as an annual per-unit rate, so
+/// a contract shorter (or longer) than 12 months only bills the matching
+/// fraction of it — e.g. a 9-month contract bills 9/12 of the annual rate,
+/// not the full year. Used for both C.D and camera, which follow the same
+/// rule; deposit is intentionally excluded since it's a one-time amount,
+/// not an annual recurring fee, so it never gets prorated by months.
+double calculateProratedFee(double annualUnitRate, int months, double quantity) {
+  return annualUnitRate * (months / 12) * quantity;
+}
+
 /// The management fee is a percentage of the base rent total (rent +
 /// service, for the contract period) rather than a flat amount.
 double calculateManagementFee(double baseRentTotal, double managementPercent) {
@@ -1640,8 +1653,8 @@ Widget buildCalculationExample(
   final yearly = calculateBasePrice(priceMonth, service, quantity, months: months);
   final managementFee = calculateManagementFee(yearly, managementPercent);
   final vat = calculateManagementVat(managementFee, vatPercent);
-  final cd = includeCd ? cdUnit * quantity : 0.0;
-  final camera = includeCamera ? cameraUnit * quantity : 0.0;
+  final cd = includeCd ? calculateProratedFee(cdUnit, months, quantity.toDouble()) : 0.0;
+  final camera = includeCamera ? calculateProratedFee(cameraUnit, months, quantity.toDouble()) : 0.0;
   final deposit = depositUnit * quantity;
   final finalPrice = calculateFinalPrice(yearly, vat, cd, camera, managementFee, deposit);
 

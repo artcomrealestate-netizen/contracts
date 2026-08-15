@@ -54,6 +54,20 @@ void main() {
       expect(calculateBasePrice(1000, 0, 4, months: 9), 36000);
     });
 
+    test('Prorated fee (C.D / camera) bills the matching fraction of the annual rate for a shorter contract', () {
+      // The example from the business: a 100/year C.D rate on a 9-month contract is 3/4 of the year -> 75.
+      expect(calculateProratedFee(100, 9, 1), 75);
+      // A 6-month contract only bills half the annual rate.
+      expect(calculateProratedFee(100, 6, 1), 50);
+      // Multiple rooms multiply on top of the prorated per-unit rate.
+      expect(calculateProratedFee(112, 6, 7), closeTo(392, 0.0001));
+    });
+
+    test('Prorated fee returns the full annual rate for a full 12-month contract', () {
+      expect(calculateProratedFee(100, 12, 1), 100);
+      expect(calculateProratedFee(112, 12, 7), closeTo(784, 0.0001));
+    });
+
     test('Management fee is a percentage of the base yearly price', () {
       expect(calculateManagementFee(36000, 10), 3600);
       expect(calculateManagementFee(36000, 7), 2520);

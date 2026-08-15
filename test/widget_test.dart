@@ -263,6 +263,58 @@ void main() {
     expect(find.text('3,000 AED'), findsNWidgets(2));
   });
 
+  testWidgets('C.D and camera fees are annual rates, so a shorter contract bills only the matching fraction', (WidgetTester tester) async {
+    await tester.pumpWidget(wrapWithApp(const QuotaCalculatorScreen()));
+
+    await tester.enterText(find.byKey(const Key('priceMonth')), '1000');
+    await tester.enterText(find.byKey(const Key('roomQuantity')), '1');
+    await tester.enterText(find.byKey(const Key('vatPercent')), '0');
+    await tester.enterText(find.byKey(const Key('cd')), '100');
+    await tester.enterText(find.byKey(const Key('camera')), '112');
+    await tester.enterText(find.byKey(const Key('deposit')), '0');
+    await tester.pumpAndSettle();
+
+    // Default contract period is 12 months, so the full annual rates apply.
+    expect(find.text('100 AED'), findsOneWidget);
+    expect(find.text('112 AED'), findsOneWidget);
+
+    // A 9-month contract only bills 9/12 of the annual rate: 100 * 0.75 = 75.
+    await tester.enterText(find.byKey(const Key('contractMonths')), '9');
+    await tester.pumpAndSettle();
+
+    expect(find.text('75 AED'), findsOneWidget);
+    expect(find.text('100 AED'), findsNothing);
+
+    // A 6-month contract bills half: 100 * 0.5 = 50, 112 * 0.5 = 56.
+    await tester.enterText(find.byKey(const Key('contractMonths')), '6');
+    await tester.pumpAndSettle();
+
+    expect(find.text('50 AED'), findsOneWidget);
+    expect(find.text('56 AED'), findsOneWidget);
+  });
+
+  testWidgets('The refundable deposit is a flat one-time amount and does not get prorated by contract months', (WidgetTester tester) async {
+    await tester.pumpWidget(wrapWithApp(const QuotaCalculatorScreen()));
+
+    await tester.enterText(find.byKey(const Key('priceMonth')), '2000');
+    await tester.enterText(find.byKey(const Key('roomQuantity')), '1');
+    await tester.enterText(find.byKey(const Key('vatPercent')), '0');
+    await tester.enterText(find.byKey(const Key('cd')), '0');
+    await tester.enterText(find.byKey(const Key('camera')), '0');
+    await tester.enterText(find.byKey(const Key('deposit')), '1500');
+    await tester.pumpAndSettle();
+
+    expect(find.text('1,500 AED'), findsOneWidget);
+
+    // Shortening the contract to 3 months must not change the deposit at all
+    // (only the rent total: 2000 * 3 * 1 = 6000, distinct from every other
+    // number on screen so the deposit match stays unambiguous).
+    await tester.enterText(find.byKey(const Key('contractMonths')), '3');
+    await tester.pumpAndSettle();
+
+    expect(find.text('1,500 AED'), findsOneWidget);
+  });
+
   testWidgets('Zero room quantity and a negative price both show an inline warning but still compute using the corrected value', (WidgetTester tester) async {
     await tester.pumpWidget(wrapWithApp(const QuotaCalculatorScreen()));
 
@@ -567,6 +619,55 @@ void main() {
     expect(nameField.controller!.text, 'Sara Ali');
     final qtyField = tester.widget<TextField>(find.byKey(const Key('roomQuantity')));
     expect(qtyField.controller!.text, '3');
+  });
+
+  testWidgets('Loading a quotation recovers the annual C.D/camera per-unit rate by un-prorating it from the stored contract length', (WidgetTester tester) async {
+    // This quotation was originally generated with cdUnit=100/year, cameraUnit=112/year,
+    // 3 rooms, on a 6-month contract, so the frozen totals are prorated to half the annual rate:
+    // cd = 100 * (6/12) * 3 = 150, camera = 112 * (6/12) * 3 = 168.
+    final savedQuotation = SavedQuotation(
+      id: 'q-prorated',
+      quotaNumber: 'QT-2026-010',
+      customerName: 'Prorated Customer',
+      createdAt: DateTime(2026, 6, 1),
+      roomType: 'Medium',
+      quantity: 3,
+      priceMonth: 2000,
+      vat: 0,
+      cd: 150,
+      camera: 168,
+      deposit: 4500,
+      contractMonths: 6,
+      numberOfPayments: 1,
+      yearlyPrice: 36000,
+      finalPrice: 40818,
+    );
+    final archiveStore = ArchiveStore.withQuotations([savedQuotation]);
+
+    await tester.pumpWidget(wrapWithApp(
+      const QuotaCalculatorScreen(),
+      archiveStore: archiveStore,
+    ));
+
+    await tester.tap(find.byKey(const Key('archiveButton')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(Key('loadButton_${savedQuotation.id}')));
+    await tester.pumpAndSettle();
+
+    final monthsField = tester.widget<TextField>(find.byKey(const Key('contractMonths')));
+    expect(monthsField.controller!.text, '6');
+
+    // The per-unit fields must show back the original annual rate (100, 112),
+    // not the prorated totals divided only by quantity (50, 56).
+    final cdField = tester.widget<TextField>(find.byKey(const Key('cd')));
+    expect(cdField.controller!.text, '100');
+    final cameraField = tester.widget<TextField>(find.byKey(const Key('camera')));
+    expect(cameraField.controller!.text, '112');
+
+    // Re-running the calculation from these recovered fields must reproduce
+    // the exact same frozen totals the quotation was saved with.
+    expect(find.text('150 AED'), findsOneWidget);
+    expect(find.text('168 AED'), findsOneWidget);
   });
 
   testWidgets('Deleting a quotation from the archive removes it after confirmation', (WidgetTester tester) async {
