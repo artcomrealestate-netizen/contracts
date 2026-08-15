@@ -16,6 +16,7 @@ class SavedQuotation {
   final double managementPercent;
   final double vatPercent;
   final double deposit;
+  final int contractMonths;
   final int numberOfPayments;
   final double yearlyPrice;
   final double finalPrice;
@@ -38,6 +39,7 @@ class SavedQuotation {
     this.managementPercent = 0,
     this.vatPercent = 5,
     required this.deposit,
+    this.contractMonths = 12,
     required this.numberOfPayments,
     required this.yearlyPrice,
     required this.finalPrice,
@@ -61,6 +63,7 @@ class SavedQuotation {
         'managementPercent': managementPercent,
         'vatPercent': vatPercent,
         'deposit': deposit,
+        'contractMonths': contractMonths,
         'numberOfPayments': numberOfPayments,
         'yearlyPrice': yearlyPrice,
         'finalPrice': finalPrice,
@@ -85,6 +88,9 @@ class SavedQuotation {
       managementPercent: (json['managementPercent'] as num?)?.toDouble() ?? 0,
       vatPercent: (json['vatPercent'] as num?)?.toDouble() ?? 5,
       deposit: (json['deposit'] as num).toDouble(),
+      // Quotations saved before the contract-period feature existed don't
+      // have this key; they were always computed as a full year.
+      contractMonths: (json['contractMonths'] as num?)?.toInt() ?? 12,
       numberOfPayments: (json['numberOfPayments'] ?? json['paymentTerms']) as int,
       yearlyPrice: (json['yearlyPrice'] as num).toDouble(),
       finalPrice: (json['finalPrice'] as num).toDouble(),

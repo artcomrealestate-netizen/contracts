@@ -235,16 +235,18 @@ class AppLocalizations {
   String get howCalculationWorks => isArabic ? 'طريقة الحساب' : 'How Calculations Work';
   String get close => isArabic ? 'إغلاق' : 'Close';
   String get calculationFormulaText => isArabic
-      ? '1. السعر السنوي = (السعر الشهري + الخدمات الشهرية) × 12 × عدد الغرف.\n'
-        '2. رسوم الإدارة = السعر السنوي × نسبة الإدارة % (تُكتب حسب كل عرض سعر).\n'
+      ? '1. إجمالي الإيجار = (السعر الشهري + الخدمات الشهرية) × مدة العقد بالأشهر × عدد الغرف — مش لازم تكون سنة كاملة، فيك تحطي 3 أو 6 أو 9 أشهر وبتنحسب صح.\n'
+        '2. رسوم الإدارة = إجمالي الإيجار × نسبة الإدارة % (تُكتب حسب كل عرض سعر).\n'
         '3. الضريبة الإدارية = رسوم الإدارة × نسبة الضريبة % (افتراضي 5%، وقابلة للتعديل).\n'
         '4. الدفاع المدني = سعر الوحدة × عدد الغرف، والكاميرا نفس الشي — كل وحدة منهم إلها checkbox مستقل خاص فيها ("تضمين رسوم الدفاع المدني" و"تضمين رسوم الكاميرا")، فيك تفعّلي وحدة وتلغي التانية، ومنفصلين تماماً عن نوع العقد (سكني/تجاري).\n'
-        '5. السعر النهائي = السعر السنوي + رسوم الإدارة + الضريبة الإدارية + الدفاع المدني + الكاميرا + الوديعة المستردة.'
-      : '1. Price/Year = (Price/Month + Monthly Services) × 12 × Quantity.\n'
-        '2. Management Fee = Price/Year × Management % (entered per quotation).\n'
+        '5. السعر النهائي = إجمالي الإيجار + رسوم الإدارة + الضريبة الإدارية + الدفاع المدني + الكاميرا + الوديعة المستردة.\n'
+        '6. الدفعات: التأمين والدفاع المدني والكاميرا ورسوم الإدارة وضريبتها كلها بتنحط مع الدفعة الأولى، وباقي إجمالي الإيجار بس بينقسم بالتساوي على باقي الدفعات.'
+      : '1. Rent Total = (Price/Month + Monthly Services) × Contract Period (Months) × Quantity — it does not have to be a full year; enter 3, 6, or 9 months and it calculates correctly.\n'
+        '2. Management Fee = Rent Total × Management % (entered per quotation).\n'
         '3. Management VAT = Management Fee × VAT % (defaults to 5%, editable).\n'
         '4. C.D = Unit Price × Quantity, and Camera the same way — each has its own independent checkbox ("Include Civil Defense fee" / "Include Camera fee"), so you can turn one on and the other off, fully separate from Contract Type (residential/commercial).\n'
-        '5. Final Price = Price/Year + Management Fee + Management VAT + C.D + Camera + Refundable Deposit.';
+        '5. Final Price = Rent Total + Management Fee + Management VAT + C.D + Camera + Refundable Deposit.\n'
+        '6. Payments: the deposit, C.D, camera, management fee, and its VAT are all bundled into the first payment; only the remaining Rent Total is split evenly across the rest of the payments.';
   String get serviceCharge => isArabic ? 'الخدمات (شهرياً)' : 'Services (Monthly)';
   String get refundableDeposit => isArabic ? 'الوديعة المستردة (للوحدة)' : 'Refundable Deposit (per unit)';
   String get paymentSystem => isArabic ? 'نظام الدفع' : 'Payment System';
@@ -252,7 +254,11 @@ class AppLocalizations {
   String get singlePayment => isArabic ? 'دفعة واحدة' : 'Single Payment';
   String paymentCountOptionLabel(int count) =>
       count == 1 ? singlePayment : (isArabic ? '$count دفعات' : '$count Payments');
-  String get yearlyRent => isArabic ? 'المبلغ السنوي' : 'Price / Year';
+  String periodRentLabel(int months) =>
+      isArabic ? 'إجمالي الإيجار ($months شهر)' : 'Rent Total ($months months)';
+  String get contractPeriodLabel => isArabic ? 'مدة العقد (بالأشهر)' : 'Contract Period (Months)';
+  String get minimumOneWarning => isArabic ? 'الحد الأدنى 1 — تم استخدام 1' : 'Minimum is 1 — using 1';
+  String get negativeValueWarning => isArabic ? 'ما بينفع تكون القيمة سالبة — تم استخدام 0' : 'Cannot be negative — using 0';
   String get finalPrice => isArabic ? 'الإجمالي النهائي' : 'Final Price';
   String paymentLabel(int index) => isArabic ? 'الدفعة ${index + 1}' : 'Payment ${index + 1}';
   String get exportPdf => isArabic ? 'تصدير PDF ومشاركة' : 'Export PDF and Share';
@@ -417,6 +423,7 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
   final _customerNameController = TextEditingController();
   final _roomQuantityController = TextEditingController();
   final _priceMonthController = TextEditingController();
+  final _contractMonthsController = TextEditingController(text: '12');
   final _cdController = TextEditingController();
   final _cameraController = TextEditingController();
   final _serviceController = TextEditingController();
@@ -427,6 +434,7 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
   final Key customerNameKey = const Key('customerName');
   final Key roomQuantityKey = const Key('roomQuantity');
   final Key priceMonthKey = const Key('priceMonth');
+  final Key contractMonthsKey = const Key('contractMonths');
   final Key cdKey = const Key('cd');
   final Key cameraKey = const Key('camera');
   final Key serviceKey = const Key('service');
@@ -441,6 +449,7 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
   bool _includeCd = true;
   bool _includeCamera = true;
   int _numberOfPayments = 2;
+  int _contractMonths = 12;
   double _yearlyPrice = 0;
   double _managementFeeAmount = 0;
   double _vatAmount = 0;
@@ -471,6 +480,7 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
       _managementController.text = formatFieldValue(template.managementPercent);
       _vatPercentController.text = formatFieldValue(template.vatPercent);
       _depositController.text = formatFieldValue(template.deposit);
+      _contractMonthsController.text = template.contractMonths.toString();
       _numberOfPayments = template.numberOfPayments;
     });
     _calculateQuota();
@@ -495,6 +505,7 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
       _managementController.text = formatFieldValue(quotation.managementPercent);
       _vatPercentController.text = formatFieldValue(quotation.vatPercent);
       _depositController.text = formatFieldValue(quotation.deposit / unitDivisor);
+      _contractMonthsController.text = quotation.contractMonths.toString();
       _numberOfPayments = quotation.numberOfPayments;
     });
     _calculateQuota();
@@ -512,6 +523,7 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
       _managementController.clear();
       _vatPercentController.text = formatFieldValue(defaultVatPercent);
       _depositController.clear();
+      _contractMonthsController.text = '12';
       _selectedRoomType = 'Small';
       _contractType = 'residential';
       _includeCd = true;
@@ -598,6 +610,7 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
       managementPercent: double.tryParse(_managementController.text) ?? 0,
       vatPercent: double.tryParse(_vatPercentController.text) ?? defaultVatPercent,
       deposit: double.tryParse(_depositController.text) ?? 0,
+      contractMonths: int.tryParse(_contractMonthsController.text) ?? 12,
       numberOfPayments: _numberOfPayments,
     );
     await templateStore.upsert(template);
@@ -646,20 +659,27 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
     );
   }
 
+  /// Payment counts that make sense for the current contract length — never
+  /// more installments than there are months, otherwise a single payment
+  /// could end up covering less than a month of rent.
+  List<int> get _availablePaymentCounts =>
+      paymentCountOptions.where((count) => count <= _contractMonths).toList();
+
   void _calculateQuota() {
     setState(() {
-      final qty = double.tryParse(_roomQuantityController.text) ?? 1;
-      final priceMonth = double.tryParse(_priceMonthController.text) ?? 0;
-      final cdUnit = double.tryParse(_cdController.text) ?? 0;
-      final cameraUnit = double.tryParse(_cameraController.text) ?? 0;
-      final service = double.tryParse(_serviceController.text) ?? 0;
-      final managementPercent = double.tryParse(_managementController.text) ?? 0;
-      final vatPercent = double.tryParse(_vatPercentController.text) ?? 0;
-      final depositUnit = double.tryParse(_depositController.text) ?? 0;
+      final qty = clampMinOne(_roomQuantityController.text);
+      final priceMonth = clampNonNegative(_priceMonthController.text);
+      final cdUnit = clampNonNegative(_cdController.text);
+      final cameraUnit = clampNonNegative(_cameraController.text);
+      final service = clampNonNegative(_serviceController.text);
+      final managementPercent = clampNonNegative(_managementController.text);
+      final vatPercent = clampNonNegative(_vatPercentController.text);
+      final depositUnit = clampNonNegative(_depositController.text);
+      _contractMonths = clampMinOne(_contractMonthsController.text).toInt();
       final cd = _includeCd ? cdUnit * qty : 0.0;
       final camera = _includeCamera ? cameraUnit * qty : 0.0;
       final deposit = depositUnit * qty;
-      _yearlyPrice = calculateBaseYearlyPrice(priceMonth, service, qty.toInt());
+      _yearlyPrice = calculateBasePrice(priceMonth, service, qty.toInt(), months: _contractMonths);
       _managementFeeAmount = calculateManagementFee(_yearlyPrice, managementPercent);
       _vatAmount = calculateManagementVat(_managementFeeAmount, vatPercent);
       _cdAmount = cd;
@@ -670,6 +690,11 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
       // collected upfront with the first installment; only the rent itself
       // (the rooms payment) is spread evenly across the installments.
       final firstPaymentExtra = _vatAmount + cd + camera + _managementFeeAmount + deposit;
+      // If the contract got shorter than the previously chosen number of
+      // payments, fall back to the longest option that still fits.
+      if (!_availablePaymentCounts.contains(_numberOfPayments)) {
+        _numberOfPayments = _availablePaymentCounts.isNotEmpty ? _availablePaymentCounts.last : 1;
+      }
       _payments = splitPayments(_yearlyPrice, numberOfPayments: _numberOfPayments, firstPaymentExtra: firstPaymentExtra);
     });
   }
@@ -696,6 +721,7 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
       managementPercent: managementPercent,
       managementFee: _managementFeeAmount,
       deposit: _depositAmount,
+      contractMonths: _contractMonths,
       yearlyPrice: _yearlyPrice,
       finalPrice: _finalPrice,
       payments: _payments,
@@ -719,6 +745,7 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
       service: service,
       managementPercent: managementPercent,
       deposit: _depositAmount,
+      contractMonths: _contractMonths,
       numberOfPayments: _numberOfPayments,
       yearlyPrice: _yearlyPrice,
       finalPrice: _finalPrice,
@@ -886,7 +913,10 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
                               key: roomQuantityKey,
                               controller: _roomQuantityController,
                               keyboardType: TextInputType.number,
-                              decoration: InputDecoration(labelText: strings.roomQuantity),
+                              decoration: InputDecoration(
+                                labelText: strings.roomQuantity,
+                                errorText: isBelowMinimumOne(_roomQuantityController.text) ? strings.minimumOneWarning : null,
+                              ),
                               onChanged: (_) => _calculateQuota(),
                             ),
                           ),
@@ -897,16 +927,41 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
                         key: serviceKey,
                         controller: _serviceController,
                         keyboardType: TextInputType.number,
-                        decoration: InputDecoration(labelText: strings.serviceCharge),
+                        decoration: InputDecoration(
+                          labelText: strings.serviceCharge,
+                          errorText: isNegativeInput(_serviceController.text) ? strings.negativeValueWarning : null,
+                        ),
                         onChanged: (_) => _calculateQuota(),
                       ),
                       const SizedBox(height: 12),
-                      TextField(
-                        key: priceMonthKey,
-                        controller: _priceMonthController,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(labelText: strings.pricePerMonth),
-                        onChanged: (_) => _calculateQuota(),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              key: priceMonthKey,
+                              controller: _priceMonthController,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                labelText: strings.pricePerMonth,
+                                errorText: isNegativeInput(_priceMonthController.text) ? strings.negativeValueWarning : null,
+                              ),
+                              onChanged: (_) => _calculateQuota(),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              key: contractMonthsKey,
+                              controller: _contractMonthsController,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                labelText: strings.contractPeriodLabel,
+                                errorText: isBelowMinimumOne(_contractMonthsController.text) ? strings.minimumOneWarning : null,
+                              ),
+                              onChanged: (_) => _calculateQuota(),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 12),
                       Row(
@@ -916,7 +971,11 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
                               key: managementKey,
                               controller: _managementController,
                               keyboardType: TextInputType.number,
-                              decoration: InputDecoration(labelText: strings.managementFee, suffixText: '%'),
+                              decoration: InputDecoration(
+                                labelText: strings.managementFee,
+                                suffixText: '%',
+                                errorText: isNegativeInput(_managementController.text) ? strings.negativeValueWarning : null,
+                              ),
                               onChanged: (_) => _calculateQuota(),
                             ),
                           ),
@@ -926,7 +985,11 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
                               key: vatPercentKey,
                               controller: _vatPercentController,
                               keyboardType: TextInputType.number,
-                              decoration: InputDecoration(labelText: strings.managementVat, suffixText: '%'),
+                              decoration: InputDecoration(
+                                labelText: strings.managementVat,
+                                suffixText: '%',
+                                errorText: isNegativeInput(_vatPercentController.text) ? strings.negativeValueWarning : null,
+                              ),
                               onChanged: (_) => _calculateQuota(),
                             ),
                           ),
@@ -949,7 +1012,10 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
                           key: cdKey,
                           controller: _cdController,
                           keyboardType: TextInputType.number,
-                          decoration: InputDecoration(labelText: strings.cdCharge),
+                          decoration: InputDecoration(
+                            labelText: strings.cdCharge,
+                            errorText: isNegativeInput(_cdController.text) ? strings.negativeValueWarning : null,
+                          ),
                           onChanged: (_) => _calculateQuota(),
                         ),
                         const SizedBox(height: 12),
@@ -970,7 +1036,10 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
                           key: cameraKey,
                           controller: _cameraController,
                           keyboardType: TextInputType.number,
-                          decoration: InputDecoration(labelText: strings.cameraFee),
+                          decoration: InputDecoration(
+                            labelText: strings.cameraFee,
+                            errorText: isNegativeInput(_cameraController.text) ? strings.negativeValueWarning : null,
+                          ),
                           onChanged: (_) => _calculateQuota(),
                         ),
                         const SizedBox(height: 12),
@@ -980,7 +1049,10 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
                         key: depositKey,
                         controller: _depositController,
                         keyboardType: TextInputType.number,
-                        decoration: InputDecoration(labelText: strings.refundableDeposit),
+                        decoration: InputDecoration(
+                          labelText: strings.refundableDeposit,
+                          errorText: isNegativeInput(_depositController.text) ? strings.negativeValueWarning : null,
+                        ),
                         onChanged: (_) => _calculateQuota(),
                       ),
                       const SizedBox(height: 12),
@@ -988,7 +1060,7 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
                         key: const Key('numberOfPaymentsDropdown'),
                         initialValue: _numberOfPayments,
                         decoration: InputDecoration(labelText: strings.numberOfPaymentsLabel),
-                        items: paymentCountOptions
+                        items: _availablePaymentCounts
                             .map((count) => DropdownMenuItem(
                                   value: count,
                                   child: Text(strings.paymentCountOptionLabel(count)),
@@ -1012,7 +1084,7 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     children: [
-                      _buildResultRow('${strings.yearlyRent}:', '${formatAmount(_yearlyPrice)} ${strings.currencySymbol}'),
+                      _buildResultRow('${strings.periodRentLabel(_contractMonths)}:', '${formatAmount(_yearlyPrice)} ${strings.currencySymbol}'),
                       _buildResultRow(
                         '${strings.managementFee} (${formatFieldValue(double.tryParse(_managementController.text) ?? 0)}%):',
                         '${formatAmount(_managementFeeAmount)} ${strings.currencySymbol}',
@@ -1163,6 +1235,24 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
                       cameraUnit: 112,
                       depositUnit: 1500,
                       numberOfPayments: 3,
+                    ),
+                    buildCalculationExample(
+                      strings,
+                      title: strings.isArabic
+                          ? 'مثال 6: عقد 6 أشهر بس (مش سنة كاملة)، غرفتين بدفعتين'
+                          : 'Example 6: a 6-month contract only (not a full year), 2 rooms in 2 payments',
+                      priceMonth: 1500,
+                      service: 0,
+                      quantity: 2,
+                      managementPercent: 10,
+                      vatPercent: 5,
+                      includeCd: true,
+                      includeCamera: true,
+                      cdUnit: 100,
+                      cameraUnit: 112,
+                      depositUnit: 1000,
+                      months: 6,
+                      numberOfPayments: 2,
                     ),
                     const SizedBox(height: 8),
                     Align(
@@ -1464,17 +1554,47 @@ String formatFieldValue(double value) {
   return value.toString();
 }
 
-/// The monthly rent and monthly service charges are combined before being
-/// annualized, so the management percentage (see [calculateManagementFee])
-/// is computed on their combined yearly total.
-double calculateBaseYearlyPrice(double priceMonth, double service, int quantity) {
-  return (priceMonth + service) * 12 * quantity;
+/// Parses [text] and clamps it to a minimum of 1, treating blank or
+/// non-numeric input the same as zero — used for room quantity and contract
+/// months, which can never sensibly be zero.
+double clampMinOne(String text) {
+  final parsed = double.tryParse(text);
+  if (parsed == null || parsed < 1) return 1;
+  return parsed;
 }
 
-/// The management fee is a percentage of the base yearly price (rent +
-/// service, annualized) rather than a flat amount.
-double calculateManagementFee(double baseYearlyPrice, double managementPercent) {
-  return baseYearlyPrice * managementPercent / 100;
+/// True when [text] is blank, non-numeric, or below 1 — i.e. whenever
+/// [clampMinOne] would silently substitute a fallback value instead of
+/// using what was actually typed.
+bool isBelowMinimumOne(String text) => (double.tryParse(text) ?? 0) < 1;
+
+/// Parses [text] and clamps negative input up to zero; blank or non-numeric
+/// input falls back to zero directly, since a blank fee field just means
+/// "no such fee" rather than an error.
+double clampNonNegative(String text) {
+  final parsed = double.tryParse(text) ?? 0;
+  return parsed < 0 ? 0 : parsed;
+}
+
+/// True only when [text] parses to an explicit negative number — blank
+/// fields are not flagged, since leaving a fee field empty is normal.
+bool isNegativeInput(String text) {
+  final parsed = double.tryParse(text);
+  return parsed != null && parsed < 0;
+}
+
+/// The monthly rent and monthly service charges are combined before being
+/// multiplied out over the contract period, so the management percentage
+/// (see [calculateManagementFee]) is computed on their combined total for
+/// however many months the contract actually runs — not always a full year.
+double calculateBasePrice(double priceMonth, double service, int quantity, {int months = 12}) {
+  return (priceMonth + service) * months * quantity;
+}
+
+/// The management fee is a percentage of the base rent total (rent +
+/// service, for the contract period) rather than a flat amount.
+double calculateManagementFee(double baseRentTotal, double managementPercent) {
+  return baseRentTotal * managementPercent / 100;
 }
 
 /// The "Management VAT" is a percentage of the management fee (not a flat
@@ -1514,9 +1634,10 @@ Widget buildCalculationExample(
   required double cdUnit,
   required double cameraUnit,
   required double depositUnit,
+  int months = 12,
   int? numberOfPayments,
 }) {
-  final yearly = calculateBaseYearlyPrice(priceMonth, service, quantity);
+  final yearly = calculateBasePrice(priceMonth, service, quantity, months: months);
   final managementFee = calculateManagementFee(yearly, managementPercent);
   final vat = calculateManagementVat(managementFee, vatPercent);
   final cd = includeCd ? cdUnit * quantity : 0.0;
@@ -1526,7 +1647,7 @@ Widget buildCalculationExample(
 
   final lines = <String>[
     '${strings.pricePerMonth}: ${formatAmount(priceMonth)}, ${strings.serviceCharge}: ${formatAmount(service)}, ${strings.roomQuantity}: $quantity',
-    '${strings.yearlyRent} = ${formatAmount(yearly)}',
+    '${strings.periodRentLabel(months)} = ${formatAmount(yearly)}',
     '${strings.managementFee} (${formatFieldValue(managementPercent)}%) = ${formatAmount(managementFee)}',
     '${strings.managementVat} (${formatFieldValue(vatPercent)}%) = ${formatAmount(vat)}',
     if (includeCd) '${strings.cdCharge} = ${formatAmount(cd)}',

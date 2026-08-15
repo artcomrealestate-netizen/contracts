@@ -29,20 +29,29 @@ List<String> generateDynamicNotes({
 
 void main() {
   group('Financial calculations', () {
-    test('Base yearly price with positive values (rent only)', () {
-      expect(calculateBaseYearlyPrice(4500, 0, 1), 54000);
-      expect(calculateBaseYearlyPrice(1000, 0, 3), 36000);
+    test('Base price defaults to a full 12-month year when months is not given', () {
+      expect(calculateBasePrice(4500, 0, 1), 54000);
+      expect(calculateBasePrice(1000, 0, 3), 36000);
     });
 
-    test('Base yearly price folds the monthly service charge into the annualized total', () {
+    test('Base price folds the monthly service charge into the total', () {
       // (2500 rent + 500 service) * 12 * 1 room = 36000
-      expect(calculateBaseYearlyPrice(2500, 500, 1), 36000);
+      expect(calculateBasePrice(2500, 500, 1), 36000);
     });
 
-    test('Base yearly price with zero values', () {
-      expect(calculateBaseYearlyPrice(0, 0, 1), 0);
-      expect(calculateBaseYearlyPrice(1000, 0, 0), 0);
-      expect(calculateBaseYearlyPrice(0, 0, 0), 0);
+    test('Base price with zero values', () {
+      expect(calculateBasePrice(0, 0, 1), 0);
+      expect(calculateBasePrice(1000, 0, 0), 0);
+      expect(calculateBasePrice(0, 0, 0), 0);
+    });
+
+    test('Base price respects a custom contract period in months instead of always assuming a year', () {
+      // 6-month contract: (1500 rent) * 6 months * 2 rooms = 18000, not the 36000 a full year would give.
+      expect(calculateBasePrice(1500, 0, 2, months: 6), 18000);
+      // 3-month contract with a service charge folded in: (2000 + 500) * 3 * 1 = 7500.
+      expect(calculateBasePrice(2000, 500, 1, months: 3), 7500);
+      // 9-month contract, 4 rooms: 1000 * 9 * 4 = 36000.
+      expect(calculateBasePrice(1000, 0, 4, months: 9), 36000);
     });
 
     test('Management fee is a percentage of the base yearly price', () {
@@ -101,6 +110,43 @@ void main() {
 
     test('firstPaymentExtra is folded into the single payment when only one installment is chosen', () {
       expect(splitPayments(12000, numberOfPayments: 1, firstPaymentExtra: 3000), [15000]);
+    });
+  });
+
+  group('Input validation helpers', () {
+    test('clampMinOne treats blank, non-numeric, zero, and negative input as invalid and falls back to 1', () {
+      expect(clampMinOne(''), 1);
+      expect(clampMinOne('abc'), 1);
+      expect(clampMinOne('0'), 1);
+      expect(clampMinOne('-5'), 1);
+    });
+
+    test('clampMinOne keeps any valid value of 1 or more as-is', () {
+      expect(clampMinOne('1'), 1);
+      expect(clampMinOne('7'), 7);
+      expect(clampMinOne('2.5'), 2.5);
+    });
+
+    test('isBelowMinimumOne flags blank, zero, and negative input, not valid input', () {
+      expect(isBelowMinimumOne(''), isTrue);
+      expect(isBelowMinimumOne('0'), isTrue);
+      expect(isBelowMinimumOne('-3'), isTrue);
+      expect(isBelowMinimumOne('1'), isFalse);
+      expect(isBelowMinimumOne('12'), isFalse);
+    });
+
+    test('clampNonNegative passes through blank and zero as zero, and floors negative input at zero', () {
+      expect(clampNonNegative(''), 0);
+      expect(clampNonNegative('0'), 0);
+      expect(clampNonNegative('-100'), 0);
+      expect(clampNonNegative('250'), 250);
+    });
+
+    test('isNegativeInput only flags an explicit negative number, not blank or zero', () {
+      expect(isNegativeInput(''), isFalse);
+      expect(isNegativeInput('0'), isFalse);
+      expect(isNegativeInput('-1'), isTrue);
+      expect(isNegativeInput('100'), isFalse);
     });
   });
 
@@ -217,6 +263,7 @@ void main() {
         managementPercent: 10,
         vatPercent: 4,
         deposit: 2500,
+        contractMonths: 9,
         numberOfPayments: 2,
       );
 
@@ -232,10 +279,11 @@ void main() {
       expect(restored.vatPercent, template.vatPercent);
       expect(restored.includeCd, template.includeCd);
       expect(restored.includeCamera, template.includeCamera);
+      expect(restored.contractMonths, template.contractMonths);
       expect(restored.numberOfPayments, template.numberOfPayments);
     });
 
-    test('defaults contractType to residential and vatPercent to 5 when absent from JSON', () {
+    test('defaults contractType to residential, vatPercent to 5, and contractMonths to 12 when absent from JSON', () {
       const template = QuotationTemplate(
         id: 't2',
         templateName: 'Legacy Room',
@@ -250,7 +298,8 @@ void main() {
         ..remove('contractType')
         ..remove('vatPercent')
         ..remove('includeCd')
-        ..remove('includeCamera');
+        ..remove('includeCamera')
+        ..remove('contractMonths');
 
       final restored = QuotationTemplate.fromJson(json);
 
@@ -258,6 +307,7 @@ void main() {
       expect(restored.vatPercent, 5);
       expect(restored.includeCd, isTrue);
       expect(restored.includeCamera, isTrue);
+      expect(restored.contractMonths, 12);
     });
   });
 
@@ -277,6 +327,7 @@ void main() {
         service: 100,
         managementPercent: 8,
         deposit: 1500,
+        contractMonths: 6,
         numberOfPayments: 2,
         yearlyPrice: 108000,
         finalPrice: 116152,
@@ -290,7 +341,32 @@ void main() {
       expect(restored.createdAt, quotation.createdAt);
       expect(restored.service, quotation.service);
       expect(restored.managementPercent, quotation.managementPercent);
+      expect(restored.contractMonths, quotation.contractMonths);
       expect(restored.finalPrice, quotation.finalPrice);
+    });
+
+    test('defaults contractMonths to 12 when absent from JSON (quotations saved before this feature)', () {
+      final quotation = SavedQuotation(
+        id: 'q-legacy',
+        quotaNumber: 'QT-2026-050',
+        customerName: 'Legacy Customer',
+        createdAt: DateTime(2026, 1, 1),
+        roomType: 'Small',
+        quantity: 1,
+        priceMonth: 1000,
+        vat: 0,
+        cd: 0,
+        camera: 0,
+        deposit: 0,
+        numberOfPayments: 1,
+        yearlyPrice: 12000,
+        finalPrice: 12000,
+      );
+      final json = quotation.toJson()..remove('contractMonths');
+
+      final restored = SavedQuotation.fromJson(json);
+
+      expect(restored.contractMonths, 12);
     });
   });
 

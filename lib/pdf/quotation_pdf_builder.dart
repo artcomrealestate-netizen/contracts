@@ -69,6 +69,7 @@ Future<Uint8List> buildQuotationPdfBytes({
   required double managementPercent,
   required double managementFee,
   required double deposit,
+  required int contractMonths,
   required double yearlyPrice,
   required double finalPrice,
   required List<double> payments,
@@ -96,7 +97,7 @@ Future<Uint8List> buildQuotationPdfBytes({
       : '${strings.managementVat} (${formatAmount(vatPercent)}%)';
 
   final tableRows = <List<String>>[
-    [strings.yearlyRent, formatAmount(yearlyPrice)],
+    [strings.periodRentLabel(contractMonths), formatAmount(yearlyPrice)],
     [managementRowLabel, formatAmount(managementFee)],
     if (vat > 0) [vatRowLabel, formatAmount(vat)],
     if (cd > 0) [strings.cdCharge, formatAmount(cd)],
@@ -183,6 +184,8 @@ Future<Uint8List> buildQuotationPdfBytes({
               ),
               pw.SizedBox(height: 4),
               pw.Text('${strings.propertyType}: $roomType (Qty: $quantity)', style: const pw.TextStyle(fontSize: 12)),
+              pw.SizedBox(height: 4),
+              pw.Text('${strings.contractPeriodLabel}: $contractMonths', style: const pw.TextStyle(fontSize: 12)),
               pw.SizedBox(height: 15),
               pw.Table(
                 border: pw.TableBorder.all(color: PdfColors.grey300),
@@ -270,7 +273,7 @@ Future<Uint8List> buildQuotationPdfBytes({
                     managementFee: managementFee,
                     cd: cd,
                     camera: camera,
-                    contractPeriodMonths: 12,
+                    contractPeriodMonths: contractMonths,
                     roomQuantity: quantity,
                   )
                   .map(

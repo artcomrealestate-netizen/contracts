@@ -34,7 +34,16 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
   Future<void> _shareQuotation(SavedQuotation quotation) async {
     final settings = Provider.of<AppSettings>(context, listen: false);
     final bundle = widget.assetBundle ?? rootBundle;
-    final payments = splitPayments(quotation.finalPrice, numberOfPayments: quotation.numberOfPayments);
+    final managementFee = calculateManagementFee(quotation.yearlyPrice, quotation.managementPercent);
+    // Same rule as a freshly generated quotation: deposit, C.D, camera,
+    // management fee, and its VAT are bundled into the first installment;
+    // only the rent total is split evenly across the rest.
+    final firstPaymentExtra = quotation.vat + quotation.cd + quotation.camera + managementFee + quotation.deposit;
+    final payments = splitPayments(
+      quotation.yearlyPrice,
+      numberOfPayments: quotation.numberOfPayments,
+      firstPaymentExtra: firstPaymentExtra,
+    );
 
     final bytes = await buildQuotationPdfBytes(
       settings: settings,
@@ -47,8 +56,9 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
       cd: quotation.cd,
       camera: quotation.camera,
       managementPercent: quotation.managementPercent,
-      managementFee: calculateManagementFee(quotation.yearlyPrice, quotation.managementPercent),
+      managementFee: managementFee,
       deposit: quotation.deposit,
+      contractMonths: quotation.contractMonths,
       yearlyPrice: quotation.yearlyPrice,
       finalPrice: quotation.finalPrice,
       payments: payments,

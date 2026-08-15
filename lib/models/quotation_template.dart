@@ -12,6 +12,7 @@ class QuotationTemplate {
   final double managementPercent;
   final double vatPercent;
   final double deposit;
+  final int contractMonths;
   final int numberOfPayments;
 
   const QuotationTemplate({
@@ -28,6 +29,7 @@ class QuotationTemplate {
     this.managementPercent = 0,
     this.vatPercent = 5,
     required this.deposit,
+    this.contractMonths = 12,
     required this.numberOfPayments,
   });
 
@@ -44,6 +46,7 @@ class QuotationTemplate {
     double? managementPercent,
     double? vatPercent,
     double? deposit,
+    int? contractMonths,
     int? numberOfPayments,
   }) {
     return QuotationTemplate(
@@ -60,6 +63,7 @@ class QuotationTemplate {
       managementPercent: managementPercent ?? this.managementPercent,
       vatPercent: vatPercent ?? this.vatPercent,
       deposit: deposit ?? this.deposit,
+      contractMonths: contractMonths ?? this.contractMonths,
       numberOfPayments: numberOfPayments ?? this.numberOfPayments,
     );
   }
@@ -78,6 +82,7 @@ class QuotationTemplate {
         'managementPercent': managementPercent,
         'vatPercent': vatPercent,
         'deposit': deposit,
+        'contractMonths': contractMonths,
         'numberOfPayments': numberOfPayments,
       };
 
@@ -96,6 +101,9 @@ class QuotationTemplate {
       managementPercent: (json['managementPercent'] as num?)?.toDouble() ?? 0,
       vatPercent: (json['vatPercent'] as num?)?.toDouble() ?? 5,
       deposit: (json['deposit'] as num).toDouble(),
+      // Quotations/templates saved before the contract-period feature existed
+      // don't have this key; they were always computed as a full year.
+      contractMonths: (json['contractMonths'] as num?)?.toInt() ?? 12,
       numberOfPayments: (json['numberOfPayments'] ?? json['paymentTerms']) as int,
     );
   }

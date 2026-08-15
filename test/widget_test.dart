@@ -196,6 +196,97 @@ void main() {
     expect(find.text('4,000 AED'), findsNWidgets(3));
   });
 
+  testWidgets('Number of payments cannot exceed the contract length in months, and auto-corrects when the contract shortens', (WidgetTester tester) async {
+    await tester.pumpWidget(wrapWithApp(const QuotaCalculatorScreen()));
+
+    await tester.enterText(find.byKey(const Key('priceMonth')), '1000');
+    await tester.enterText(find.byKey(const Key('roomQuantity')), '1');
+    await tester.enterText(find.byKey(const Key('vatPercent')), '0');
+    await tester.enterText(find.byKey(const Key('cd')), '0');
+    await tester.enterText(find.byKey(const Key('camera')), '0');
+    await tester.enterText(find.byKey(const Key('deposit')), '0');
+    await tester.pumpAndSettle();
+
+    // Pick 6 payments while the contract is still the default 12 months.
+    await tester.ensureVisible(find.byKey(const Key('numberOfPaymentsDropdown')));
+    await tester.tap(find.byKey(const Key('numberOfPaymentsDropdown')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('6 Payments').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Payment 6:'), findsOneWidget);
+
+    // Shorten the contract to 3 months: 6 payments no longer fits (would be
+    // less than a month of rent per payment), so it should silently fall
+    // back to the longest option that still does (3).
+    await tester.enterText(find.byKey(const Key('contractMonths')), '3');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Payment 6:'), findsNothing);
+    expect(find.text('Payment 4:'), findsNothing);
+    expect(find.text('Payment 3:'), findsOneWidget);
+
+    // The dropdown itself should no longer offer options longer than the contract.
+    await tester.ensureVisible(find.byKey(const Key('numberOfPaymentsDropdown')));
+    await tester.tap(find.byKey(const Key('numberOfPaymentsDropdown')));
+    await tester.pumpAndSettle();
+    expect(find.text('6 Payments'), findsNothing);
+    expect(find.text('4 Payments'), findsNothing);
+    expect(find.text('3 Payments'), findsWidgets);
+  });
+
+  testWidgets('Contract period in months drives the rent total instead of always assuming a full year', (WidgetTester tester) async {
+    await tester.pumpWidget(wrapWithApp(const QuotaCalculatorScreen()));
+
+    await tester.enterText(find.byKey(const Key('priceMonth')), '1000');
+    await tester.enterText(find.byKey(const Key('roomQuantity')), '1');
+    await tester.enterText(find.byKey(const Key('vatPercent')), '0');
+    await tester.enterText(find.byKey(const Key('cd')), '0');
+    await tester.enterText(find.byKey(const Key('camera')), '0');
+    await tester.enterText(find.byKey(const Key('deposit')), '0');
+    await tester.pumpAndSettle();
+
+    // Contract period defaults to 12 months: 1000 * 12 * 1 = 12000.
+    expect(find.text('12,000 AED'), findsNWidgets(2));
+
+    await tester.enterText(find.byKey(const Key('contractMonths')), '6');
+    await tester.pumpAndSettle();
+
+    // A 6-month contract: 1000 * 6 * 1 = 6000, not the full-year 12000.
+    expect(find.text('6,000 AED'), findsNWidgets(2));
+    expect(find.text('12,000 AED'), findsNothing);
+
+    await tester.enterText(find.byKey(const Key('contractMonths')), '3');
+    await tester.pumpAndSettle();
+
+    // A 3-month contract: 1000 * 3 * 1 = 3000.
+    expect(find.text('3,000 AED'), findsNWidgets(2));
+  });
+
+  testWidgets('Zero room quantity and a negative price both show an inline warning but still compute using the corrected value', (WidgetTester tester) async {
+    await tester.pumpWidget(wrapWithApp(const QuotaCalculatorScreen()));
+
+    await tester.enterText(find.byKey(const Key('roomQuantity')), '0');
+    await tester.enterText(find.byKey(const Key('priceMonth')), '-500');
+    await tester.enterText(find.byKey(const Key('vatPercent')), '0');
+    await tester.enterText(find.byKey(const Key('cd')), '0');
+    await tester.enterText(find.byKey(const Key('camera')), '0');
+    await tester.enterText(find.byKey(const Key('deposit')), '0');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Minimum is 1 — using 1'), findsOneWidget);
+    expect(find.text('Cannot be negative — using 0'), findsOneWidget);
+    // Quantity is treated as 1 and price as 0, so the rent total is 0, not negative.
+    expect(find.text('0 AED'), findsWidgets);
+
+    await tester.enterText(find.byKey(const Key('roomQuantity')), '2');
+    await tester.enterText(find.byKey(const Key('priceMonth')), '1000');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Minimum is 1 — using 1'), findsNothing);
+    expect(find.text('Cannot be negative — using 0'), findsNothing);
+  });
+
   testWidgets(
     'The C.D and Camera checkboxes are independent - unchecking one leaves the other field visible',
     (WidgetTester tester) async {
