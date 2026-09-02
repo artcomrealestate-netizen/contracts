@@ -230,6 +230,7 @@ class AppLocalizations {
   String get contractTypeLabel => isArabic ? 'نوع العقد' : 'Contract Type';
   String get residentialContract => isArabic ? 'سكني' : 'Residential';
   String get commercialContract => isArabic ? 'تجاري / صناعي' : 'Commercial / Industrial';
+  String get warehouseContract => isArabic ? 'مستودع' : 'Warehouse';
   String get includeCd => isArabic ? 'تضمين رسوم الدفاع المدني' : 'Include Civil Defense fee';
   String get includeCamera => isArabic ? 'تضمين رسوم الكاميرا' : 'Include Camera fee';
   String get howCalculationWorks => isArabic ? 'طريقة الحساب' : 'How Calculations Work';
@@ -891,6 +892,7 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
                         items: [
                           DropdownMenuItem(value: 'residential', child: Text(strings.residentialContract)),
                           DropdownMenuItem(value: 'commercial', child: Text(strings.commercialContract)),
+                          DropdownMenuItem(value: 'warehouse', child: Text(strings.warehouseContract)),
                         ],
                         onChanged: (val) {
                           if (val == null) return;
@@ -902,9 +904,10 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
                         children: [
                           Expanded(
                             child: DropdownButtonFormField<String>(
+                              key: const Key('propertyTypeDropdown'),
                               initialValue: _selectedRoomType,
                               decoration: InputDecoration(labelText: strings.propertyType),
-                              items: ['Small', 'Medium', 'Large'].map((type) {
+                              items: ['Small', 'Medium', 'Large', 'Warehouse'].map((type) {
                                 return DropdownMenuItem(value: type, child: Text(type));
                               }).toList(),
                               onChanged: (val) => setState(() => _selectedRoomType = val!),
