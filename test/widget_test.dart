@@ -487,25 +487,30 @@ void main() {
     expect(find.byKey(const Key('resetLogoButton')), findsNothing);
   });
 
-  testWidgets('Warehouse is available as both a property type and a contract type', (WidgetTester tester) async {
+  testWidgets('Warehouse and Shop are available as both a property type and a contract type', (WidgetTester tester) async {
     await tester.pumpWidget(wrapWithApp(const QuotaCalculatorScreen()));
 
-    await tester.ensureVisible(find.byKey(const Key('contractTypeDropdown')));
-    await tester.tap(find.byKey(const Key('contractTypeDropdown')));
-    await tester.pumpAndSettle();
-    expect(find.text('Warehouse'), findsOneWidget);
-    await tester.tap(find.text('Warehouse'));
-    await tester.pumpAndSettle();
+    for (final label in ['Warehouse', 'Shop']) {
+      await tester.ensureVisible(find.byKey(const Key('contractTypeDropdown')));
+      await tester.tap(find.byKey(const Key('contractTypeDropdown')));
+      await tester.pumpAndSettle();
+      expect(find.text(label), findsOneWidget);
+      await tester.tap(find.text(label));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.byKey(const Key('propertyTypeDropdown')));
+      await tester.tap(find.byKey(const Key('propertyTypeDropdown')));
+      await tester.pumpAndSettle();
+      // Two matches here: the contract type field (just set above) still shows
+      // it in its closed state, plus the now-open property type menu offers it too.
+      expect(find.text(label), findsWidgets);
+      // Close the property type menu before the next iteration checks the contract type dropdown again.
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+    }
 
     final contractTypeField = tester.widget<DropdownButtonFormField<String>>(find.byKey(const Key('contractTypeDropdown')));
-    expect(contractTypeField.initialValue, 'warehouse');
-
-    await tester.ensureVisible(find.byKey(const Key('propertyTypeDropdown')));
-    await tester.tap(find.byKey(const Key('propertyTypeDropdown')));
-    await tester.pumpAndSettle();
-    // Two matches here: the contract type field (set to Warehouse above) still
-    // shows it in its closed state, plus the now-open property type menu offers it too.
-    expect(find.text('Warehouse'), findsWidgets);
+    expect(contractTypeField.initialValue, 'shop');
   });
 
   testWidgets('Selecting a template fills the price fields', (WidgetTester tester) async {

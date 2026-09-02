@@ -231,6 +231,7 @@ class AppLocalizations {
   String get residentialContract => isArabic ? 'سكني' : 'Residential';
   String get commercialContract => isArabic ? 'تجاري / صناعي' : 'Commercial / Industrial';
   String get warehouseContract => isArabic ? 'مستودع' : 'Warehouse';
+  String get shopContract => isArabic ? 'محل' : 'Shop';
   String get includeCd => isArabic ? 'تضمين رسوم الدفاع المدني' : 'Include Civil Defense fee';
   String get includeCamera => isArabic ? 'تضمين رسوم الكاميرا' : 'Include Camera fee';
   String get howCalculationWorks => isArabic ? 'طريقة الحساب' : 'How Calculations Work';
@@ -893,6 +894,7 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
                           DropdownMenuItem(value: 'residential', child: Text(strings.residentialContract)),
                           DropdownMenuItem(value: 'commercial', child: Text(strings.commercialContract)),
                           DropdownMenuItem(value: 'warehouse', child: Text(strings.warehouseContract)),
+                          DropdownMenuItem(value: 'shop', child: Text(strings.shopContract)),
                         ],
                         onChanged: (val) {
                           if (val == null) return;
@@ -907,7 +909,7 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
                               key: const Key('propertyTypeDropdown'),
                               initialValue: _selectedRoomType,
                               decoration: InputDecoration(labelText: strings.propertyType),
-                              items: ['Small', 'Medium', 'Large', 'Warehouse'].map((type) {
+                              items: ['Small', 'Medium', 'Large', 'Warehouse', 'Shop'].map((type) {
                                 return DropdownMenuItem(value: type, child: Text(type));
                               }).toList(),
                               onChanged: (val) => setState(() => _selectedRoomType = val!),
