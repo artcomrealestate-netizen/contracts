@@ -73,6 +73,12 @@ Future<Uint8List> buildQuotationPdfBytes({
   required double yearlyPrice,
   required double finalPrice,
   required List<double> payments,
+  bool isWarehouse = false,
+  double contractCertFee = 0,
+  double hemayaInsurance = 0,
+  double hemayaContractFee = 0,
+  int? khana,
+  String? shabraNumbers,
 }) async {
   final logoBytes = await _loadLogoBytes(settings, bundle);
   final logoImage = pw.MemoryImage(logoBytes);
@@ -96,13 +102,18 @@ Future<Uint8List> buildQuotationPdfBytes({
       ? '${strings.managementVat} (${formatAmount(vatPercent)}%)'
       : '${strings.managementVat} (${formatAmount(vatPercent)}%)';
 
+  final depositRowLabel = isWarehouse ? strings.warehouseDepositPercentLabel : strings.refundableDeposit;
+
   final tableRows = <List<String>>[
-    [strings.periodRentLabel(contractMonths), formatAmount(yearlyPrice)],
+    [isWarehouse ? strings.warehouseRentLabel : strings.periodRentLabel(contractMonths), formatAmount(yearlyPrice)],
     [managementRowLabel, formatAmount(managementFee)],
     if (vat > 0) [vatRowLabel, formatAmount(vat)],
     if (cd > 0) [strings.cdCharge, formatAmount(cd)],
-    if (camera > 0) [strings.cameraFee, formatAmount(camera)],
-    [strings.refundableDeposit, formatAmount(deposit)],
+    if (!isWarehouse && camera > 0) [strings.cameraFee, formatAmount(camera)],
+    if (isWarehouse && contractCertFee > 0) [strings.contractCertFeeLabel, formatAmount(contractCertFee)],
+    if (isWarehouse && hemayaInsurance > 0) [strings.hemayaInsurancePerShabraLabel, formatAmount(hemayaInsurance)],
+    if (isWarehouse && hemayaContractFee > 0) [strings.hemayaContractFeePerShabraLabel, formatAmount(hemayaContractFee)],
+    [depositRowLabel, formatAmount(deposit)],
     [strings.finalPrice, formatAmount(finalPrice)],
   ];
 
@@ -183,7 +194,12 @@ Future<Uint8List> buildQuotationPdfBytes({
                 ],
               ),
               pw.SizedBox(height: 4),
-              pw.Text('${strings.propertyType}: $roomType (Qty: $quantity)', style: const pw.TextStyle(fontSize: 12)),
+              pw.Text(
+                isWarehouse
+                    ? '${strings.khanaLabel}: ${khana ?? 0}, ${strings.shabraNumbersLabel}: ${shabraNumbers ?? ''}, ${strings.shabraCountLabel}: $quantity'
+                    : '${strings.propertyType}: $roomType (Qty: $quantity)',
+                style: const pw.TextStyle(fontSize: 12),
+              ),
               pw.SizedBox(height: 4),
               pw.Text('${strings.contractPeriodLabel}: $contractMonths', style: const pw.TextStyle(fontSize: 12)),
               pw.SizedBox(height: 15),

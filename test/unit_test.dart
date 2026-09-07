@@ -127,6 +127,53 @@ void main() {
     });
   });
 
+  group('Warehouse calculations', () {
+    test('Warehouse rent = price per sqft x area, not multiplied by contract months', () {
+      expect(calculateWarehouseRent(50, 2000), 100000);
+    });
+
+    test('Warehouse civil defense is flat per shabra, not prorated by contract months', () {
+      expect(calculateWarehouseCivilDefense(1000, 5), 5000);
+    });
+
+    test('HEMAYA insurance and contract fees are flat per shabra', () {
+      expect(calculateHemayaInsurance(1500, 5), 7500);
+      expect(calculateHemayaContractFee(500, 5), 2500);
+    });
+
+    test('Warehouse VAT applies to rent + contract-cert-fee + management fee, excluding civil defense and HEMAYA fees', () {
+      expect(calculateWarehouseVat(100000, 160, 10000, 5), closeTo(5508, 0.001));
+    });
+
+    test('Warehouse final price matches the confirmed worked example (rent 100k, mgmt 10%, 5 shabras, VAT 5%, deposit 10%)', () {
+      final finalPrice = calculateWarehouseFinalPrice(
+        totalRent: 100000,
+        managementFee: 10000,
+        civilDefense: 5000,
+        contractCertFee: 160,
+        hemayaInsurance: 7500,
+        hemayaContractFee: 2500,
+        deposit: 10000,
+        vat: 5508,
+      );
+      expect(finalPrice, 140668);
+    });
+
+    test('Warehouse payment split bundles every non-rent fee into the first installment', () {
+      final payments = splitPayments(100000, numberOfPayments: 2, firstPaymentExtra: 40668);
+      expect(payments, [90668, 50000]);
+      expect(payments.reduce((a, b) => a + b), 140668);
+    });
+  });
+
+  group('Industrial deposit override', () {
+    test('calculatePercentOfRent computes N% of a rent total', () {
+      expect(calculatePercentOfRent(36000, 10), 3600);
+      expect(calculatePercentOfRent(36000, 15), 5400);
+      expect(calculatePercentOfRent(100000, 10), 10000);
+    });
+  });
+
   group('Input validation helpers', () {
     test('clampMinOne treats blank, non-numeric, zero, and negative input as invalid and falls back to 1', () {
       expect(clampMinOne(''), 1);
@@ -323,6 +370,84 @@ void main() {
       expect(restored.includeCamera, isTrue);
       expect(restored.contractMonths, 12);
     });
+
+    test('round-trips warehouse/shabra fields and the industrial deposit percent through JSON', () {
+      const template = QuotationTemplate(
+        id: 't3',
+        templateName: 'Warehouse Bay',
+        roomType: 'Warehouse',
+        contractType: 'warehouse',
+        priceMonth: 0,
+        cd: 0,
+        camera: 0,
+        deposit: 0,
+        industrialDepositPercent: 12,
+        numberOfPayments: 2,
+        khana: 7,
+        shabraNumbers: '1, 2, 5',
+        shabraCount: 3,
+        area: 2000,
+        pricePerSqft: 50,
+        warehouseDepositPercent: 10,
+        civilDefensePerShabraRate: 1000,
+        contractCertFee: 160,
+        hemayaInsuranceRate: 1500,
+        hemayaContractFeeRate: 500,
+      );
+
+      final restored = QuotationTemplate.fromJson(template.toJson());
+
+      expect(restored.industrialDepositPercent, template.industrialDepositPercent);
+      expect(restored.khana, template.khana);
+      expect(restored.shabraNumbers, template.shabraNumbers);
+      expect(restored.shabraCount, template.shabraCount);
+      expect(restored.area, template.area);
+      expect(restored.pricePerSqft, template.pricePerSqft);
+      expect(restored.warehouseDepositPercent, template.warehouseDepositPercent);
+      expect(restored.civilDefensePerShabraRate, template.civilDefensePerShabraRate);
+      expect(restored.contractCertFee, template.contractCertFee);
+      expect(restored.hemayaInsuranceRate, template.hemayaInsuranceRate);
+      expect(restored.hemayaContractFeeRate, template.hemayaContractFeeRate);
+    });
+
+    test('defaults all warehouse fields and industrialDepositPercent when absent from JSON (older saved templates)', () {
+      const template = QuotationTemplate(
+        id: 't4',
+        templateName: 'Legacy',
+        roomType: 'Small',
+        priceMonth: 4000,
+        cd: 100,
+        camera: 112,
+        deposit: 1000,
+        numberOfPayments: 1,
+      );
+      final json = template.toJson()
+        ..remove('industrialDepositPercent')
+        ..remove('khana')
+        ..remove('shabraNumbers')
+        ..remove('shabraCount')
+        ..remove('area')
+        ..remove('pricePerSqft')
+        ..remove('warehouseDepositPercent')
+        ..remove('civilDefensePerShabraRate')
+        ..remove('contractCertFee')
+        ..remove('hemayaInsuranceRate')
+        ..remove('hemayaContractFeeRate');
+
+      final restored = QuotationTemplate.fromJson(json);
+
+      expect(restored.industrialDepositPercent, 10);
+      expect(restored.khana, 0);
+      expect(restored.shabraNumbers, '');
+      expect(restored.shabraCount, 1);
+      expect(restored.area, 0);
+      expect(restored.pricePerSqft, 0);
+      expect(restored.warehouseDepositPercent, 10);
+      expect(restored.civilDefensePerShabraRate, 1000);
+      expect(restored.contractCertFee, 160);
+      expect(restored.hemayaInsuranceRate, 1500);
+      expect(restored.hemayaContractFeeRate, 500);
+    });
   });
 
   group('SavedQuotation model', () {
@@ -381,6 +506,91 @@ void main() {
       final restored = SavedQuotation.fromJson(json);
 
       expect(restored.contractMonths, 12);
+    });
+
+    test('round-trips warehouse/shabra fields through JSON', () {
+      final quotation = SavedQuotation(
+        id: 'q-warehouse',
+        quotaNumber: 'QT-2026-060',
+        customerName: 'Warehouse Customer',
+        createdAt: DateTime(2026, 6, 1),
+        roomType: 'Warehouse',
+        contractType: 'warehouse',
+        quantity: 3,
+        priceMonth: 0,
+        vat: 5508,
+        cd: 0,
+        camera: 0,
+        deposit: 0,
+        industrialDepositPercent: 10,
+        numberOfPayments: 2,
+        yearlyPrice: 100000,
+        finalPrice: 140668,
+        khana: 7,
+        shabraNumbers: '1, 2, 5',
+        shabraCount: 5,
+        area: 2000,
+        pricePerSqft: 50,
+        warehouseDepositPercent: 10,
+        civilDefensePerShabraRate: 1000,
+        contractCertFee: 160,
+        hemayaInsuranceRate: 1500,
+        hemayaContractFeeRate: 500,
+      );
+
+      final restored = SavedQuotation.fromJson(quotation.toJson());
+
+      expect(restored.khana, quotation.khana);
+      expect(restored.shabraNumbers, quotation.shabraNumbers);
+      expect(restored.shabraCount, quotation.shabraCount);
+      expect(restored.area, quotation.area);
+      expect(restored.pricePerSqft, quotation.pricePerSqft);
+      expect(restored.warehouseDepositPercent, quotation.warehouseDepositPercent);
+      expect(restored.civilDefensePerShabraRate, quotation.civilDefensePerShabraRate);
+      expect(restored.contractCertFee, quotation.contractCertFee);
+      expect(restored.hemayaInsuranceRate, quotation.hemayaInsuranceRate);
+      expect(restored.hemayaContractFeeRate, quotation.hemayaContractFeeRate);
+    });
+
+    test('defaults warehouse fields when absent from JSON (quotations saved before this feature)', () {
+      final quotation = SavedQuotation(
+        id: 'q-legacy2',
+        quotaNumber: 'QT-2026-051',
+        customerName: 'Legacy Customer',
+        createdAt: DateTime(2026, 1, 1),
+        roomType: 'Small',
+        quantity: 1,
+        priceMonth: 1000,
+        vat: 0,
+        cd: 0,
+        camera: 0,
+        deposit: 0,
+        numberOfPayments: 1,
+        yearlyPrice: 12000,
+        finalPrice: 12000,
+      );
+      final json = quotation.toJson()
+        ..remove('khana')
+        ..remove('shabraNumbers')
+        ..remove('shabraCount')
+        ..remove('area')
+        ..remove('pricePerSqft')
+        ..remove('warehouseDepositPercent')
+        ..remove('civilDefensePerShabraRate')
+        ..remove('contractCertFee')
+        ..remove('hemayaInsuranceRate')
+        ..remove('hemayaContractFeeRate');
+
+      final restored = SavedQuotation.fromJson(json);
+
+      expect(restored.khana, 0);
+      expect(restored.shabraNumbers, '');
+      expect(restored.shabraCount, 1);
+      expect(restored.warehouseDepositPercent, 10);
+      expect(restored.civilDefensePerShabraRate, 1000);
+      expect(restored.contractCertFee, 160);
+      expect(restored.hemayaInsuranceRate, 1500);
+      expect(restored.hemayaContractFeeRate, 500);
     });
   });
 

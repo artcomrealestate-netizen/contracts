@@ -487,30 +487,115 @@ void main() {
     expect(find.byKey(const Key('resetLogoButton')), findsNothing);
   });
 
-  testWidgets('Warehouse and Shop are available as both a property type and a contract type', (WidgetTester tester) async {
+  testWidgets('Warehouse and Shop are available as property types while contract type is Shop (non-warehouse)', (WidgetTester tester) async {
     await tester.pumpWidget(wrapWithApp(const QuotaCalculatorScreen()));
 
-    for (final label in ['Warehouse', 'Shop']) {
-      await tester.ensureVisible(find.byKey(const Key('contractTypeDropdown')));
-      await tester.tap(find.byKey(const Key('contractTypeDropdown')));
-      await tester.pumpAndSettle();
-      expect(find.text(label), findsOneWidget);
-      await tester.tap(find.text(label));
-      await tester.pumpAndSettle();
-
-      await tester.ensureVisible(find.byKey(const Key('propertyTypeDropdown')));
-      await tester.tap(find.byKey(const Key('propertyTypeDropdown')));
-      await tester.pumpAndSettle();
-      // Two matches here: the contract type field (just set above) still shows
-      // it in its closed state, plus the now-open property type menu offers it too.
-      expect(find.text(label), findsWidgets);
-      // Close the property type menu before the next iteration checks the contract type dropdown again.
-      await tester.tapAt(const Offset(10, 10));
-      await tester.pumpAndSettle();
-    }
+    await tester.ensureVisible(find.byKey(const Key('contractTypeDropdown')));
+    await tester.tap(find.byKey(const Key('contractTypeDropdown')));
+    await tester.pumpAndSettle();
+    expect(find.text('Shop'), findsOneWidget);
+    await tester.tap(find.text('Shop'));
+    await tester.pumpAndSettle();
 
     final contractTypeField = tester.widget<DropdownButtonFormField<String>>(find.byKey(const Key('contractTypeDropdown')));
     expect(contractTypeField.initialValue, 'shop');
+
+    // Contract type is "shop", not "warehouse", so the room field-set (and
+    // propertyTypeDropdown) stays visible and still offers Warehouse/Shop
+    // as property-size categories.
+    await tester.ensureVisible(find.byKey(const Key('propertyTypeDropdown')));
+    await tester.tap(find.byKey(const Key('propertyTypeDropdown')));
+    await tester.pumpAndSettle();
+    expect(find.text('Warehouse'), findsOneWidget);
+    expect(find.text('Shop'), findsWidgets);
+  });
+
+  testWidgets('Selecting Warehouse as the contract type swaps to the warehouse field-set and hides the room fields', (WidgetTester tester) async {
+    await tester.pumpWidget(wrapWithApp(const QuotaCalculatorScreen()));
+
+    await tester.ensureVisible(find.byKey(const Key('contractTypeDropdown')));
+    await tester.tap(find.byKey(const Key('contractTypeDropdown')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Warehouse'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('shabraCount')), findsOneWidget);
+    expect(find.byKey(const Key('area')), findsOneWidget);
+    expect(find.byKey(const Key('pricePerSqft')), findsOneWidget);
+    expect(find.byKey(const Key('khana')), findsOneWidget);
+    expect(find.byKey(const Key('shabraNumbers')), findsOneWidget);
+    expect(find.byKey(const Key('warehouseDepositPercent')), findsOneWidget);
+    expect(find.byKey(const Key('civilDefensePerShabra')), findsOneWidget);
+    expect(find.byKey(const Key('contractCertFee')), findsOneWidget);
+    expect(find.byKey(const Key('hemayaInsurance')), findsOneWidget);
+    expect(find.byKey(const Key('hemayaContractFee')), findsOneWidget);
+
+    expect(find.byKey(const Key('roomQuantity')), findsNothing);
+    expect(find.byKey(const Key('propertyTypeDropdown')), findsNothing);
+    expect(find.byKey(const Key('deposit')), findsNothing);
+    expect(find.byKey(const Key('includeCdCheckbox')), findsNothing);
+    expect(find.byKey(const Key('includeCameraCheckbox')), findsNothing);
+  });
+
+  testWidgets('Selecting Industrial contract type shows a 10%-default deposit-percent field instead of the flat deposit field', (WidgetTester tester) async {
+    await tester.pumpWidget(wrapWithApp(const QuotaCalculatorScreen()));
+
+    expect(find.byKey(const Key('deposit')), findsOneWidget);
+    expect(find.byKey(const Key('industrialDepositPercent')), findsNothing);
+
+    await tester.ensureVisible(find.byKey(const Key('contractTypeDropdown')));
+    await tester.tap(find.byKey(const Key('contractTypeDropdown')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Industrial'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('deposit')), findsNothing);
+    final depositPercentField = tester.widget<TextField>(find.byKey(const Key('industrialDepositPercent')));
+    expect(depositPercentField.controller!.text, '10');
+  });
+
+  testWidgets('Industrial deposit defaults to 10% of rent and updates when overridden', (WidgetTester tester) async {
+    await tester.pumpWidget(wrapWithApp(const QuotaCalculatorScreen()));
+
+    await tester.enterText(find.byKey(const Key('priceMonth')), '1000');
+    await tester.enterText(find.byKey(const Key('roomQuantity')), '1');
+    await tester.enterText(find.byKey(const Key('vatPercent')), '0');
+    await tester.enterText(find.byKey(const Key('cd')), '0');
+    await tester.enterText(find.byKey(const Key('camera')), '0');
+    await tester.ensureVisible(find.byKey(const Key('contractTypeDropdown')));
+    await tester.tap(find.byKey(const Key('contractTypeDropdown')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Industrial'));
+    await tester.pumpAndSettle();
+
+    // Rent = 1000 * 12 * 1 = 12000; deposit defaults to 10% = 1200.
+    expect(find.text('1,200 AED'), findsOneWidget);
+
+    await tester.enterText(find.byKey(const Key('industrialDepositPercent')), '20');
+    await tester.pumpAndSettle();
+
+    expect(find.text('2,400 AED'), findsOneWidget);
+  });
+
+  testWidgets('A full warehouse quotation matches the confirmed worked example (5 shabras, 2000 sqft @ 50/sqft)', (WidgetTester tester) async {
+    await tester.pumpWidget(wrapWithApp(const QuotaCalculatorScreen()));
+
+    await tester.tap(find.byKey(const Key('contractTypeDropdown')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Warehouse'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('pricePerSqft')), '50');
+    await tester.enterText(find.byKey(const Key('area')), '2000');
+    await tester.enterText(find.byKey(const Key('shabraCount')), '5');
+    await tester.enterText(find.byKey(const Key('management')), '10');
+    await tester.pumpAndSettle();
+
+    // rent=100000, mgmt=10000, cd=1000*5=5000, contractCertFee=160 (default),
+    // hemayaInsurance=1500*5=7500, hemayaContractFee=500*5=2500,
+    // deposit=10% of 100000=10000, vat=5%*(100000+160+10000)=5508.
+    // final = 100000+10000+5000+160+7500+2500+10000+5508 = 140668.
+    expect(find.text('140,668 AED'), findsOneWidget);
   });
 
   testWidgets('Selecting a template fills the price fields', (WidgetTester tester) async {

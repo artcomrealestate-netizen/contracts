@@ -1,15 +1,19 @@
 ﻿import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' show ProviderScope;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'core/config/environment.dart';
+import 'features/auth/presentation/splash_screen.dart';
 import 'models/quotation_template.dart';
 import 'models/saved_quotation.dart';
 import 'pdf/quotation_pdf_builder.dart';
@@ -229,9 +233,22 @@ class AppLocalizations {
   String get cameraFee => isArabic ? 'رسوم الكاميرا (سنوي، للوحدة)' : 'Camera Fee (annual, per unit)';
   String get contractTypeLabel => isArabic ? 'نوع العقد' : 'Contract Type';
   String get residentialContract => isArabic ? 'سكني' : 'Residential';
-  String get commercialContract => isArabic ? 'تجاري / صناعي' : 'Commercial / Industrial';
+  String get commercialContract => isArabic ? 'تجاري' : 'Commercial';
+  String get industrialContract => isArabic ? 'صناعي' : 'Industrial';
   String get warehouseContract => isArabic ? 'مستودع' : 'Warehouse';
   String get shopContract => isArabic ? 'محل' : 'Shop';
+  String get industrialDepositPercentLabel => isArabic ? 'نسبة الوديعة (من الإيجار) %' : 'Deposit % (of rent)';
+  String get khanaLabel => isArabic ? 'خانة' : 'Khana';
+  String get shabraNumbersLabel => isArabic ? 'أرقام الشبرات' : 'Shabra Numbers';
+  String get shabraCountLabel => isArabic ? 'عدد الشبرات' : 'Number of Shabras';
+  String get areaLabel => isArabic ? 'المساحة' : 'Area';
+  String get pricePerSqftLabel => isArabic ? 'السعر للقدم' : 'Price / sq ft';
+  String get warehouseDepositPercentLabel => isArabic ? 'نسبة التأمين (من الإيجار) %' : 'Deposit % (of rent)';
+  String get civilDefensePerShabraLabel => isArabic ? 'الدفاع المدني (للشبرة الواحدة)' : 'Civil Defense (per shabra)';
+  String get contractCertFeeLabel => isArabic ? 'رسم تصديق العقد' : 'Contract Certification Fee';
+  String get hemayaInsurancePerShabraLabel => isArabic ? 'رسوم حماية HEMAYA - تأمين (للشبرة الواحدة)' : 'HEMAYA Protection Insurance (per shabra)';
+  String get hemayaContractFeePerShabraLabel => isArabic ? 'رسوم عقد حماية HEMAYA (للشبرة الواحدة)' : 'HEMAYA Protection Contract Fee (per shabra)';
+  String get warehouseRentLabel => isArabic ? 'إجمالي الإيجار (المساحة × السعر للقدم)' : 'Rent Total (Area × Price/sq ft)';
   String get includeCd => isArabic ? 'تضمين رسوم الدفاع المدني' : 'Include Civil Defense fee';
   String get includeCamera => isArabic ? 'تضمين رسوم الكاميرا' : 'Include Camera fee';
   String get howCalculationWorks => isArabic ? 'طريقة الحساب' : 'How Calculations Work';
@@ -373,13 +390,23 @@ Future<void> main() async {
   final settings = await AppSettings.load();
   final templateStore = await TemplateStore.load();
   final archiveStore = await ArchiveStore.load();
-  runApp(MultiProvider(
-    providers: [
-      ChangeNotifierProvider<AppSettings>.value(value: settings),
-      ChangeNotifierProvider<TemplateStore>.value(value: templateStore),
-      ChangeNotifierProvider<ArchiveStore>.value(value: archiveStore),
-    ],
-    child: const QuotaApp(),
+  // The calculator itself needs no backend, so a Firebase init failure
+  // (offline, misconfigured project, ...) must not take down the whole app
+  // — only the new "Contract System" entry point depends on it.
+  try {
+    await Firebase.initializeApp(options: Environment.firebaseOptions);
+  } catch (_) {
+    // Contract System entry point will surface its own error when opened.
+  }
+  runApp(ProviderScope(
+    child: MultiProvider(
+      providers: [
+        ChangeNotifierProvider<AppSettings>.value(value: settings),
+        ChangeNotifierProvider<TemplateStore>.value(value: templateStore),
+        ChangeNotifierProvider<ArchiveStore>.value(value: archiveStore),
+      ],
+      child: const QuotaApp(),
+    ),
   ));
 }
 
@@ -432,6 +459,19 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
   final _managementController = TextEditingController();
   final _vatPercentController = TextEditingController(text: formatFieldValue(defaultVatPercent));
   final _depositController = TextEditingController();
+  final _industrialDepositPercentController = TextEditingController(text: formatFieldValue(10));
+
+  // Warehouse/shabra quotation fields.
+  final _khanaController = TextEditingController();
+  final _shabraNumbersController = TextEditingController();
+  final _shabraCountController = TextEditingController();
+  final _areaController = TextEditingController();
+  final _pricePerSqftController = TextEditingController();
+  final _warehouseDepositPercentController = TextEditingController(text: formatFieldValue(10));
+  final _civilDefensePerShabraController = TextEditingController(text: formatFieldValue(1000));
+  final _contractCertFeeController = TextEditingController(text: formatFieldValue(160));
+  final _hemayaInsuranceController = TextEditingController(text: formatFieldValue(1500));
+  final _hemayaContractFeeController = TextEditingController(text: formatFieldValue(500));
 
   final Key customerNameKey = const Key('customerName');
   final Key roomQuantityKey = const Key('roomQuantity');
@@ -443,6 +483,18 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
   final Key managementKey = const Key('management');
   final Key vatPercentKey = const Key('vatPercent');
   final Key depositKey = const Key('deposit');
+  final Key industrialDepositPercentKey = const Key('industrialDepositPercent');
+
+  final Key khanaKey = const Key('khana');
+  final Key shabraNumbersKey = const Key('shabraNumbers');
+  final Key shabraCountKey = const Key('shabraCount');
+  final Key areaKey = const Key('area');
+  final Key pricePerSqftKey = const Key('pricePerSqft');
+  final Key warehouseDepositPercentKey = const Key('warehouseDepositPercent');
+  final Key civilDefensePerShabraKey = const Key('civilDefensePerShabra');
+  final Key contractCertFeeKey = const Key('contractCertFee');
+  final Key hemayaInsuranceKey = const Key('hemayaInsurance');
+  final Key hemayaContractFeeKey = const Key('hemayaContractFee');
 
   static const List<int> paymentCountOptions = [1, 2, 3, 4, 6, 12];
 
@@ -458,6 +510,9 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
   double _cdAmount = 0;
   double _cameraAmount = 0;
   double _depositAmount = 0;
+  double _contractCertFeeAmount = 0;
+  double _hemayaInsuranceAmount = 0;
+  double _hemayaContractFeeAmount = 0;
   double _finalPrice = 0;
   List<double> _payments = [];
   String? _selectedTemplateId;
@@ -482,8 +537,19 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
       _managementController.text = formatFieldValue(template.managementPercent);
       _vatPercentController.text = formatFieldValue(template.vatPercent);
       _depositController.text = formatFieldValue(template.deposit);
+      _industrialDepositPercentController.text = formatFieldValue(template.industrialDepositPercent);
       _contractMonthsController.text = template.contractMonths.toString();
       _numberOfPayments = template.numberOfPayments;
+      _khanaController.text = template.khana.toString();
+      _shabraNumbersController.text = template.shabraNumbers;
+      _shabraCountController.text = template.shabraCount.toString();
+      _areaController.text = formatFieldValue(template.area);
+      _pricePerSqftController.text = formatFieldValue(template.pricePerSqft);
+      _warehouseDepositPercentController.text = formatFieldValue(template.warehouseDepositPercent);
+      _civilDefensePerShabraController.text = formatFieldValue(template.civilDefensePerShabraRate);
+      _contractCertFeeController.text = formatFieldValue(template.contractCertFee);
+      _hemayaInsuranceController.text = formatFieldValue(template.hemayaInsuranceRate);
+      _hemayaContractFeeController.text = formatFieldValue(template.hemayaContractFeeRate);
     });
     _calculateQuota();
   }
@@ -510,8 +576,21 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
       _managementController.text = formatFieldValue(quotation.managementPercent);
       _vatPercentController.text = formatFieldValue(quotation.vatPercent);
       _depositController.text = formatFieldValue(quotation.deposit / unitDivisor);
+      _industrialDepositPercentController.text = formatFieldValue(quotation.industrialDepositPercent);
       _contractMonthsController.text = quotation.contractMonths.toString();
       _numberOfPayments = quotation.numberOfPayments;
+      // Warehouse fields are stored as raw rates (unlike cd/camera/deposit
+      // above), so they're restored with a direct assignment, no math.
+      _khanaController.text = quotation.khana.toString();
+      _shabraNumbersController.text = quotation.shabraNumbers;
+      _shabraCountController.text = quotation.shabraCount.toString();
+      _areaController.text = formatFieldValue(quotation.area);
+      _pricePerSqftController.text = formatFieldValue(quotation.pricePerSqft);
+      _warehouseDepositPercentController.text = formatFieldValue(quotation.warehouseDepositPercent);
+      _civilDefensePerShabraController.text = formatFieldValue(quotation.civilDefensePerShabraRate);
+      _contractCertFeeController.text = formatFieldValue(quotation.contractCertFee);
+      _hemayaInsuranceController.text = formatFieldValue(quotation.hemayaInsuranceRate);
+      _hemayaContractFeeController.text = formatFieldValue(quotation.hemayaContractFeeRate);
     });
     _calculateQuota();
   }
@@ -528,12 +607,23 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
       _managementController.clear();
       _vatPercentController.text = formatFieldValue(defaultVatPercent);
       _depositController.clear();
+      _industrialDepositPercentController.text = formatFieldValue(10);
       _contractMonthsController.text = '12';
       _selectedRoomType = 'Small';
       _contractType = 'residential';
       _includeCd = true;
       _includeCamera = true;
       _numberOfPayments = 2;
+      _khanaController.clear();
+      _shabraNumbersController.clear();
+      _shabraCountController.clear();
+      _areaController.clear();
+      _pricePerSqftController.clear();
+      _warehouseDepositPercentController.text = formatFieldValue(10);
+      _civilDefensePerShabraController.text = formatFieldValue(1000);
+      _contractCertFeeController.text = formatFieldValue(160);
+      _hemayaInsuranceController.text = formatFieldValue(1500);
+      _hemayaContractFeeController.text = formatFieldValue(500);
     });
     _calculateQuota();
   }
@@ -615,8 +705,19 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
       managementPercent: double.tryParse(_managementController.text) ?? 0,
       vatPercent: double.tryParse(_vatPercentController.text) ?? defaultVatPercent,
       deposit: double.tryParse(_depositController.text) ?? 0,
+      industrialDepositPercent: double.tryParse(_industrialDepositPercentController.text) ?? 10,
       contractMonths: int.tryParse(_contractMonthsController.text) ?? 12,
       numberOfPayments: _numberOfPayments,
+      khana: int.tryParse(_khanaController.text) ?? 0,
+      shabraNumbers: _shabraNumbersController.text,
+      shabraCount: int.tryParse(_shabraCountController.text) ?? 1,
+      area: double.tryParse(_areaController.text) ?? 0,
+      pricePerSqft: double.tryParse(_pricePerSqftController.text) ?? 0,
+      warehouseDepositPercent: double.tryParse(_warehouseDepositPercentController.text) ?? 10,
+      civilDefensePerShabraRate: double.tryParse(_civilDefensePerShabraController.text) ?? 1000,
+      contractCertFee: double.tryParse(_contractCertFeeController.text) ?? 160,
+      hemayaInsuranceRate: double.tryParse(_hemayaInsuranceController.text) ?? 1500,
+      hemayaContractFeeRate: double.tryParse(_hemayaContractFeeController.text) ?? 500,
     );
     await templateStore.upsert(template);
     setState(() => _selectedTemplateId = template.id);
@@ -672,6 +773,50 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
 
   void _calculateQuota() {
     setState(() {
+      _contractMonths = clampMinOne(_contractMonthsController.text).toInt();
+
+      if (_contractType == 'warehouse') {
+        final area = clampNonNegative(_areaController.text);
+        final pricePerSqft = clampNonNegative(_pricePerSqftController.text);
+        final shabraCount = clampMinOne(_shabraCountController.text).toInt();
+        final managementPercent = clampNonNegative(_managementController.text);
+        final vatPercent = clampNonNegative(_vatPercentController.text);
+        final depositPercent = clampNonNegative(_warehouseDepositPercentController.text);
+        final cdRate = clampNonNegative(_civilDefensePerShabraController.text);
+        final contractCertFee = clampNonNegative(_contractCertFeeController.text);
+        final hemayaInsuranceRate = clampNonNegative(_hemayaInsuranceController.text);
+        final hemayaContractFeeRate = clampNonNegative(_hemayaContractFeeController.text);
+
+        _yearlyPrice = calculateWarehouseRent(pricePerSqft, area);
+        _managementFeeAmount = calculateManagementFee(_yearlyPrice, managementPercent);
+        _cdAmount = calculateWarehouseCivilDefense(cdRate, shabraCount);
+        _cameraAmount = 0;
+        _contractCertFeeAmount = contractCertFee;
+        _hemayaInsuranceAmount = calculateHemayaInsurance(hemayaInsuranceRate, shabraCount);
+        _hemayaContractFeeAmount = calculateHemayaContractFee(hemayaContractFeeRate, shabraCount);
+        _depositAmount = calculatePercentOfRent(_yearlyPrice, depositPercent);
+        _vatAmount = calculateWarehouseVat(_yearlyPrice, contractCertFee, _managementFeeAmount, vatPercent);
+        _finalPrice = calculateWarehouseFinalPrice(
+          totalRent: _yearlyPrice,
+          managementFee: _managementFeeAmount,
+          civilDefense: _cdAmount,
+          contractCertFee: _contractCertFeeAmount,
+          hemayaInsurance: _hemayaInsuranceAmount,
+          hemayaContractFee: _hemayaContractFeeAmount,
+          deposit: _depositAmount,
+          vat: _vatAmount,
+        );
+        // Same rule as rooms: everything except the rent itself bundles into
+        // the first installment; only the rent splits evenly across the rest.
+        final firstPaymentExtra = _managementFeeAmount + _cdAmount + _contractCertFeeAmount +
+            _hemayaInsuranceAmount + _hemayaContractFeeAmount + _depositAmount + _vatAmount;
+        if (!_availablePaymentCounts.contains(_numberOfPayments)) {
+          _numberOfPayments = _availablePaymentCounts.isNotEmpty ? _availablePaymentCounts.last : 1;
+        }
+        _payments = splitPayments(_yearlyPrice, numberOfPayments: _numberOfPayments, firstPaymentExtra: firstPaymentExtra);
+        return;
+      }
+
       final qty = clampMinOne(_roomQuantityController.text);
       final priceMonth = clampNonNegative(_priceMonthController.text);
       final cdUnit = clampNonNegative(_cdController.text);
@@ -679,17 +824,20 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
       final service = clampNonNegative(_serviceController.text);
       final managementPercent = clampNonNegative(_managementController.text);
       final vatPercent = clampNonNegative(_vatPercentController.text);
-      final depositUnit = clampNonNegative(_depositController.text);
-      _contractMonths = clampMinOne(_contractMonthsController.text).toInt();
       final cd = _includeCd ? calculateProratedFee(cdUnit, _contractMonths, qty) : 0.0;
       final camera = _includeCamera ? calculateProratedFee(cameraUnit, _contractMonths, qty) : 0.0;
-      final deposit = depositUnit * qty;
       _yearlyPrice = calculateBasePrice(priceMonth, service, qty.toInt(), months: _contractMonths);
+      final deposit = _contractType == 'industrial'
+          ? calculatePercentOfRent(_yearlyPrice, clampNonNegative(_industrialDepositPercentController.text))
+          : clampNonNegative(_depositController.text) * qty;
       _managementFeeAmount = calculateManagementFee(_yearlyPrice, managementPercent);
       _vatAmount = calculateManagementVat(_managementFeeAmount, vatPercent);
       _cdAmount = cd;
       _cameraAmount = camera;
       _depositAmount = deposit;
+      _contractCertFeeAmount = 0;
+      _hemayaInsuranceAmount = 0;
+      _hemayaContractFeeAmount = 0;
       _finalPrice = calculateFinalPrice(_yearlyPrice, _vatAmount, cd, camera, _managementFeeAmount, deposit);
       // Insurance/deposit, C.D, management fee + its VAT, and camera are all
       // collected upfront with the first installment; only the rent itself
@@ -704,14 +852,345 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
     });
   }
 
+  Widget _buildRoomFields(AppLocalizations strings) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                key: const Key('propertyTypeDropdown'),
+                initialValue: _selectedRoomType,
+                decoration: InputDecoration(labelText: strings.propertyType),
+                items: ['Small', 'Medium', 'Large', 'Warehouse', 'Shop'].map((type) {
+                  return DropdownMenuItem(value: type, child: Text(type));
+                }).toList(),
+                onChanged: (val) => setState(() => _selectedRoomType = val!),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                key: roomQuantityKey,
+                controller: _roomQuantityController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: strings.roomQuantity,
+                  errorText: isBelowMinimumOne(_roomQuantityController.text) ? strings.minimumOneWarning : null,
+                ),
+                onChanged: (_) => _calculateQuota(),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          key: serviceKey,
+          controller: _serviceController,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            labelText: strings.serviceCharge,
+            errorText: isNegativeInput(_serviceController.text) ? strings.negativeValueWarning : null,
+          ),
+          onChanged: (_) => _calculateQuota(),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                key: priceMonthKey,
+                controller: _priceMonthController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: strings.pricePerMonth,
+                  errorText: isNegativeInput(_priceMonthController.text) ? strings.negativeValueWarning : null,
+                ),
+                onChanged: (_) => _calculateQuota(),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                key: contractMonthsKey,
+                controller: _contractMonthsController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: strings.contractPeriodLabel,
+                  errorText: isBelowMinimumOne(_contractMonthsController.text) ? strings.minimumOneWarning : null,
+                ),
+                onChanged: (_) => _calculateQuota(),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                key: managementKey,
+                controller: _managementController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: strings.managementFee,
+                  suffixText: '%',
+                  errorText: isNegativeInput(_managementController.text) ? strings.negativeValueWarning : null,
+                ),
+                onChanged: (_) => _calculateQuota(),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                key: vatPercentKey,
+                controller: _vatPercentController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: strings.managementVat,
+                  suffixText: '%',
+                  errorText: isNegativeInput(_vatPercentController.text) ? strings.negativeValueWarning : null,
+                ),
+                onChanged: (_) => _calculateQuota(),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        CheckboxListTile(
+          key: const Key('includeCdCheckbox'),
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          title: Text(strings.includeCd),
+          value: _includeCd,
+          onChanged: (checked) {
+            setState(() => _includeCd = checked ?? true);
+            _calculateQuota();
+          },
+        ),
+        if (_includeCd) ...[
+          TextField(
+            key: cdKey,
+            controller: _cdController,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              labelText: strings.cdCharge,
+              errorText: isNegativeInput(_cdController.text) ? strings.negativeValueWarning : null,
+            ),
+            onChanged: (_) => _calculateQuota(),
+          ),
+          const SizedBox(height: 12),
+        ],
+        CheckboxListTile(
+          key: const Key('includeCameraCheckbox'),
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          title: Text(strings.includeCamera),
+          value: _includeCamera,
+          onChanged: (checked) {
+            setState(() => _includeCamera = checked ?? true);
+            _calculateQuota();
+          },
+        ),
+        if (_includeCamera) ...[
+          TextField(
+            key: cameraKey,
+            controller: _cameraController,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              labelText: strings.cameraFee,
+              errorText: isNegativeInput(_cameraController.text) ? strings.negativeValueWarning : null,
+            ),
+            onChanged: (_) => _calculateQuota(),
+          ),
+          const SizedBox(height: 12),
+        ],
+        const SizedBox(height: 12),
+        _contractType == 'industrial'
+            ? TextField(
+                key: industrialDepositPercentKey,
+                controller: _industrialDepositPercentController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: strings.industrialDepositPercentLabel,
+                  suffixText: '%',
+                  errorText: isNegativeInput(_industrialDepositPercentController.text) ? strings.negativeValueWarning : null,
+                ),
+                onChanged: (_) => _calculateQuota(),
+              )
+            : TextField(
+                key: depositKey,
+                controller: _depositController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: strings.refundableDeposit,
+                  errorText: isNegativeInput(_depositController.text) ? strings.negativeValueWarning : null,
+                ),
+                onChanged: (_) => _calculateQuota(),
+              ),
+      ],
+    );
+  }
+
+  Widget _buildWarehouseFields(AppLocalizations strings) {
+    Widget numberField(Key key, TextEditingController controller, String label, {String? suffixText}) {
+      return TextField(
+        key: key,
+        controller: controller,
+        keyboardType: TextInputType.number,
+        decoration: InputDecoration(
+          labelText: label,
+          suffixText: suffixText,
+          errorText: isNegativeInput(controller.text) ? strings.negativeValueWarning : null,
+        ),
+        onChanged: (_) => _calculateQuota(),
+      );
+    }
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                key: khanaKey,
+                controller: _khanaController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(labelText: strings.khanaLabel),
+                onChanged: (_) => _calculateQuota(),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                key: shabraNumbersKey,
+                controller: _shabraNumbersController,
+                decoration: InputDecoration(labelText: strings.shabraNumbersLabel),
+                onChanged: (_) => _calculateQuota(),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                key: shabraCountKey,
+                controller: _shabraCountController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: strings.shabraCountLabel,
+                  errorText: isBelowMinimumOne(_shabraCountController.text) ? strings.minimumOneWarning : null,
+                ),
+                onChanged: (_) => _calculateQuota(),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: numberField(areaKey, _areaController, strings.areaLabel)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(child: numberField(pricePerSqftKey, _pricePerSqftController, strings.pricePerSqftLabel)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                key: contractMonthsKey,
+                controller: _contractMonthsController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: strings.contractPeriodLabel,
+                  errorText: isBelowMinimumOne(_contractMonthsController.text) ? strings.minimumOneWarning : null,
+                ),
+                onChanged: (_) => _calculateQuota(),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(child: numberField(managementKey, _managementController, strings.managementFee, suffixText: '%')),
+            const SizedBox(width: 10),
+            Expanded(child: numberField(vatPercentKey, _vatPercentController, strings.managementVat, suffixText: '%')),
+          ],
+        ),
+        const SizedBox(height: 12),
+        numberField(warehouseDepositPercentKey, _warehouseDepositPercentController, strings.warehouseDepositPercentLabel, suffixText: '%'),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(child: numberField(civilDefensePerShabraKey, _civilDefensePerShabraController, strings.civilDefensePerShabraLabel)),
+            const SizedBox(width: 10),
+            Expanded(child: numberField(contractCertFeeKey, _contractCertFeeController, strings.contractCertFeeLabel)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(child: numberField(hemayaInsuranceKey, _hemayaInsuranceController, strings.hemayaInsurancePerShabraLabel)),
+            const SizedBox(width: 10),
+            Expanded(child: numberField(hemayaContractFeeKey, _hemayaContractFeeController, strings.hemayaContractFeePerShabraLabel)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _buildRoomResultRows(AppLocalizations strings) {
+    return [
+      _buildResultRow('${strings.periodRentLabel(_contractMonths)}:', '${formatAmount(_yearlyPrice)} ${strings.currencySymbol}'),
+      _buildResultRow(
+        '${strings.managementFee} (${formatFieldValue(double.tryParse(_managementController.text) ?? 0)}%):',
+        '${formatAmount(_managementFeeAmount)} ${strings.currencySymbol}',
+      ),
+      _buildResultRow(
+        '${strings.managementVat} (${formatFieldValue(double.tryParse(_vatPercentController.text) ?? 0)}%):',
+        '${formatAmount(_vatAmount)} ${strings.currencySymbol}',
+      ),
+      if (_includeCd) _buildResultRow('${strings.cdCharge}:', '${formatAmount(_cdAmount)} ${strings.currencySymbol}'),
+      if (_includeCamera) _buildResultRow('${strings.cameraFee}:', '${formatAmount(_cameraAmount)} ${strings.currencySymbol}'),
+      _buildResultRow(
+        _contractType == 'industrial' ? '${strings.industrialDepositPercentLabel}:' : '${strings.refundableDeposit}:',
+        '${formatAmount(_depositAmount)} ${strings.currencySymbol}',
+      ),
+    ];
+  }
+
+  List<Widget> _buildWarehouseResultRows(AppLocalizations strings) {
+    return [
+      _buildResultRow('${strings.warehouseRentLabel}:', '${formatAmount(_yearlyPrice)} ${strings.currencySymbol}'),
+      _buildResultRow(
+        '${strings.managementFee} (${formatFieldValue(double.tryParse(_managementController.text) ?? 0)}%):',
+        '${formatAmount(_managementFeeAmount)} ${strings.currencySymbol}',
+      ),
+      _buildResultRow(
+        '${strings.managementVat} (${formatFieldValue(double.tryParse(_vatPercentController.text) ?? 0)}%):',
+        '${formatAmount(_vatAmount)} ${strings.currencySymbol}',
+      ),
+      _buildResultRow('${strings.civilDefensePerShabraLabel}:', '${formatAmount(_cdAmount)} ${strings.currencySymbol}'),
+      _buildResultRow('${strings.contractCertFeeLabel}:', '${formatAmount(_contractCertFeeAmount)} ${strings.currencySymbol}'),
+      _buildResultRow('${strings.hemayaInsurancePerShabraLabel}:', '${formatAmount(_hemayaInsuranceAmount)} ${strings.currencySymbol}'),
+      _buildResultRow('${strings.hemayaContractFeePerShabraLabel}:', '${formatAmount(_hemayaContractFeeAmount)} ${strings.currencySymbol}'),
+      _buildResultRow('${strings.warehouseDepositPercentLabel}:', '${formatAmount(_depositAmount)} ${strings.currencySymbol}'),
+    ];
+  }
+
   Future<void> _generateAndSharePDF() async {
     final settings = Provider.of<AppSettings>(context, listen: false);
     final archive = Provider.of<ArchiveStore>(context, listen: false);
     final bundle = widget.assetBundle ?? rootBundle;
-    final quantity = int.tryParse(_roomQuantityController.text) ?? 1;
+    final isWarehouse = _contractType == 'warehouse';
+    final quantity = isWarehouse
+        ? clampMinOne(_shabraCountController.text).toInt()
+        : (int.tryParse(_roomQuantityController.text) ?? 1);
     final service = double.tryParse(_serviceController.text) ?? 0;
     final managementPercent = double.tryParse(_managementController.text) ?? 0;
     final vatPercent = double.tryParse(_vatPercentController.text) ?? defaultVatPercent;
+    final khana = int.tryParse(_khanaController.text) ?? 0;
+    final shabraNumbers = _shabraNumbersController.text;
 
     final bytes = await buildQuotationPdfBytes(
       settings: settings,
@@ -730,6 +1209,12 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
       yearlyPrice: _yearlyPrice,
       finalPrice: _finalPrice,
       payments: _payments,
+      isWarehouse: isWarehouse,
+      contractCertFee: _contractCertFeeAmount,
+      hemayaInsurance: _hemayaInsuranceAmount,
+      hemayaContractFee: _hemayaContractFeeAmount,
+      khana: isWarehouse ? khana : null,
+      shabraNumbers: isWarehouse ? shabraNumbers : null,
     );
 
     await archive.add(SavedQuotation(
@@ -743,17 +1228,28 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
       priceMonth: double.tryParse(_priceMonthController.text) ?? 0,
       vat: _vatAmount,
       vatPercent: vatPercent,
-      cd: _cdAmount,
+      cd: isWarehouse ? 0 : _cdAmount,
       camera: _cameraAmount,
       includeCd: _includeCd,
       includeCamera: _includeCamera,
       service: service,
       managementPercent: managementPercent,
-      deposit: _depositAmount,
+      deposit: isWarehouse ? 0 : _depositAmount,
+      industrialDepositPercent: double.tryParse(_industrialDepositPercentController.text) ?? 10,
       contractMonths: _contractMonths,
       numberOfPayments: _numberOfPayments,
       yearlyPrice: _yearlyPrice,
       finalPrice: _finalPrice,
+      khana: khana,
+      shabraNumbers: shabraNumbers,
+      shabraCount: quantity,
+      area: double.tryParse(_areaController.text) ?? 0,
+      pricePerSqft: double.tryParse(_pricePerSqftController.text) ?? 0,
+      warehouseDepositPercent: double.tryParse(_warehouseDepositPercentController.text) ?? 10,
+      civilDefensePerShabraRate: double.tryParse(_civilDefensePerShabraController.text) ?? 1000,
+      contractCertFee: double.tryParse(_contractCertFeeController.text) ?? 160,
+      hemayaInsuranceRate: double.tryParse(_hemayaInsuranceController.text) ?? 1500,
+      hemayaContractFeeRate: double.tryParse(_hemayaContractFeeController.text) ?? 500,
     ));
 
     final sharer = widget.pdfSharer ?? PrintingPdfSharer();
@@ -789,6 +1285,16 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
             icon: const Icon(Icons.history),
             onPressed: _openArchive,
             tooltip: strings.archiveTitle,
+          ),
+          IconButton(
+            key: const Key('contractSystemButton'),
+            icon: const Icon(Icons.gavel_outlined),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ContractSystemRoot()),
+              );
+            },
+            tooltip: strings.isArabic ? 'نظام العقود' : 'Contract System',
           ),
           IconButton(
             icon: const Icon(Icons.settings),
@@ -893,176 +1399,21 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
                         items: [
                           DropdownMenuItem(value: 'residential', child: Text(strings.residentialContract)),
                           DropdownMenuItem(value: 'commercial', child: Text(strings.commercialContract)),
+                          DropdownMenuItem(value: 'industrial', child: Text(strings.industrialContract)),
                           DropdownMenuItem(value: 'warehouse', child: Text(strings.warehouseContract)),
                           DropdownMenuItem(value: 'shop', child: Text(strings.shopContract)),
                         ],
                         onChanged: (val) {
                           if (val == null) return;
-                          setState(() => _contractType = val);
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              key: const Key('propertyTypeDropdown'),
-                              initialValue: _selectedRoomType,
-                              decoration: InputDecoration(labelText: strings.propertyType),
-                              items: ['Small', 'Medium', 'Large', 'Warehouse', 'Shop'].map((type) {
-                                return DropdownMenuItem(value: type, child: Text(type));
-                              }).toList(),
-                              onChanged: (val) => setState(() => _selectedRoomType = val!),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: TextField(
-                              key: roomQuantityKey,
-                              controller: _roomQuantityController,
-                              keyboardType: TextInputType.number,
-                              decoration: InputDecoration(
-                                labelText: strings.roomQuantity,
-                                errorText: isBelowMinimumOne(_roomQuantityController.text) ? strings.minimumOneWarning : null,
-                              ),
-                              onChanged: (_) => _calculateQuota(),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        key: serviceKey,
-                        controller: _serviceController,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          labelText: strings.serviceCharge,
-                          errorText: isNegativeInput(_serviceController.text) ? strings.negativeValueWarning : null,
-                        ),
-                        onChanged: (_) => _calculateQuota(),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              key: priceMonthKey,
-                              controller: _priceMonthController,
-                              keyboardType: TextInputType.number,
-                              decoration: InputDecoration(
-                                labelText: strings.pricePerMonth,
-                                errorText: isNegativeInput(_priceMonthController.text) ? strings.negativeValueWarning : null,
-                              ),
-                              onChanged: (_) => _calculateQuota(),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: TextField(
-                              key: contractMonthsKey,
-                              controller: _contractMonthsController,
-                              keyboardType: TextInputType.number,
-                              decoration: InputDecoration(
-                                labelText: strings.contractPeriodLabel,
-                                errorText: isBelowMinimumOne(_contractMonthsController.text) ? strings.minimumOneWarning : null,
-                              ),
-                              onChanged: (_) => _calculateQuota(),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              key: managementKey,
-                              controller: _managementController,
-                              keyboardType: TextInputType.number,
-                              decoration: InputDecoration(
-                                labelText: strings.managementFee,
-                                suffixText: '%',
-                                errorText: isNegativeInput(_managementController.text) ? strings.negativeValueWarning : null,
-                              ),
-                              onChanged: (_) => _calculateQuota(),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: TextField(
-                              key: vatPercentKey,
-                              controller: _vatPercentController,
-                              keyboardType: TextInputType.number,
-                              decoration: InputDecoration(
-                                labelText: strings.managementVat,
-                                suffixText: '%',
-                                errorText: isNegativeInput(_vatPercentController.text) ? strings.negativeValueWarning : null,
-                              ),
-                              onChanged: (_) => _calculateQuota(),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      CheckboxListTile(
-                        key: const Key('includeCdCheckbox'),
-                        contentPadding: EdgeInsets.zero,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        title: Text(strings.includeCd),
-                        value: _includeCd,
-                        onChanged: (checked) {
-                          setState(() => _includeCd = checked ?? true);
+                          setState(() {
+                            _contractType = val;
+                            if (val == 'warehouse') _selectedRoomType = 'Warehouse';
+                          });
                           _calculateQuota();
                         },
                       ),
-                      if (_includeCd) ...[
-                        TextField(
-                          key: cdKey,
-                          controller: _cdController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: strings.cdCharge,
-                            errorText: isNegativeInput(_cdController.text) ? strings.negativeValueWarning : null,
-                          ),
-                          onChanged: (_) => _calculateQuota(),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      CheckboxListTile(
-                        key: const Key('includeCameraCheckbox'),
-                        contentPadding: EdgeInsets.zero,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        title: Text(strings.includeCamera),
-                        value: _includeCamera,
-                        onChanged: (checked) {
-                          setState(() => _includeCamera = checked ?? true);
-                          _calculateQuota();
-                        },
-                      ),
-                      if (_includeCamera) ...[
-                        TextField(
-                          key: cameraKey,
-                          controller: _cameraController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: strings.cameraFee,
-                            errorText: isNegativeInput(_cameraController.text) ? strings.negativeValueWarning : null,
-                          ),
-                          onChanged: (_) => _calculateQuota(),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
                       const SizedBox(height: 12),
-                      TextField(
-                        key: depositKey,
-                        controller: _depositController,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          labelText: strings.refundableDeposit,
-                          errorText: isNegativeInput(_depositController.text) ? strings.negativeValueWarning : null,
-                        ),
-                        onChanged: (_) => _calculateQuota(),
-                      ),
+                      _contractType == 'warehouse' ? _buildWarehouseFields(strings) : _buildRoomFields(strings),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<int>(
                         key: const Key('numberOfPaymentsDropdown'),
@@ -1092,18 +1443,7 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     children: [
-                      _buildResultRow('${strings.periodRentLabel(_contractMonths)}:', '${formatAmount(_yearlyPrice)} ${strings.currencySymbol}'),
-                      _buildResultRow(
-                        '${strings.managementFee} (${formatFieldValue(double.tryParse(_managementController.text) ?? 0)}%):',
-                        '${formatAmount(_managementFeeAmount)} ${strings.currencySymbol}',
-                      ),
-                      _buildResultRow(
-                        '${strings.managementVat} (${formatFieldValue(double.tryParse(_vatPercentController.text) ?? 0)}%):',
-                        '${formatAmount(_vatAmount)} ${strings.currencySymbol}',
-                      ),
-                      if (_includeCd) _buildResultRow('${strings.cdCharge}:', '${formatAmount(_cdAmount)} ${strings.currencySymbol}'),
-                      if (_includeCamera) _buildResultRow('${strings.cameraFee}:', '${formatAmount(_cameraAmount)} ${strings.currencySymbol}'),
-                      _buildResultRow('${strings.refundableDeposit}:', '${formatAmount(_depositAmount)} ${strings.currencySymbol}'),
+                      ...(_contractType == 'warehouse' ? _buildWarehouseResultRows(strings) : _buildRoomResultRows(strings)),
                       const Divider(),
                       _buildResultRow('${strings.finalPrice}:', '${formatAmount(_finalPrice)} ${strings.currencySymbol}', isBold: true),
                       const Divider(),
@@ -1140,8 +1480,12 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
       padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(fontWeight: isBold ? FontWeight.bold : FontWeight.normal, fontSize: isBold ? 16 : 14)),
+          Expanded(
+            child: Text(label, style: TextStyle(fontWeight: isBold ? FontWeight.bold : FontWeight.normal, fontSize: isBold ? 16 : 14)),
+          ),
+          const SizedBox(width: 8),
           Text(value, style: TextStyle(fontWeight: isBold ? FontWeight.bold : FontWeight.normal, fontSize: isBold ? 16 : 14, color: isBold ? Colors.blue.shade900 : Colors.black)),
         ],
       ),
@@ -1635,6 +1979,50 @@ double calculateFinalPrice(
 ) {
   return baseYearlyPrice + vat + cd + camera + managementFee + deposit;
 }
+
+/// Shared by two independent features that both compute "N% of a rent
+/// total": the Industrial room-deposit override and the warehouse deposit.
+double calculatePercentOfRent(double rentTotal, double percent) => rentTotal * percent / 100;
+
+/// Warehouse rent is billed directly by area, never multiplied by contract
+/// months — unlike [calculateBasePrice] for rooms, months only gate which
+/// payment counts are available, not the rent size itself.
+double calculateWarehouseRent(double pricePerSqft, double area) => pricePerSqft * area;
+
+/// Flat per-shabra civil defense fee. Deliberately not prorated by months —
+/// no such rule applies to warehouse quotations, unlike rooms' C.D/camera
+/// (see [calculateProratedFee]).
+double calculateWarehouseCivilDefense(double cdPerShabraRate, int shabraCount) =>
+    cdPerShabraRate * shabraCount;
+
+double calculateHemayaInsurance(double hemayaInsuranceRate, int shabraCount) =>
+    hemayaInsuranceRate * shabraCount;
+
+double calculateHemayaContractFee(double hemayaContractFeeRate, int shabraCount) =>
+    hemayaContractFeeRate * shabraCount;
+
+/// VAT base for a warehouse quotation is rent + the flat contract
+/// certification fee + the management fee — explicitly excluding civil
+/// defense and both HEMAYA fees.
+double calculateWarehouseVat(
+  double totalRent,
+  double contractCertFee,
+  double managementFee,
+  double vatPercent,
+) =>
+    (totalRent + contractCertFee + managementFee) * vatPercent / 100;
+
+double calculateWarehouseFinalPrice({
+  required double totalRent,
+  required double managementFee,
+  required double civilDefense,
+  required double contractCertFee,
+  required double hemayaInsurance,
+  required double hemayaContractFee,
+  required double deposit,
+  required double vat,
+}) =>
+    totalRent + managementFee + civilDefense + contractCertFee + hemayaInsurance + hemayaContractFee + deposit + vat;
 
 /// Builds one worked example for the "How Calculations Work" help dialog,
 /// computed live through the same functions the calculator itself uses so
