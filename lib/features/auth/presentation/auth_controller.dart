@@ -58,6 +58,18 @@ class AuthController extends AsyncNotifier<AppUser?> {
     });
   }
 
+  Future<void> signInWithGoogle() async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      final authRepository = ref.read(authRepositoryProvider);
+      final identity = await authRepository.signInWithGoogle();
+      // identity == null means the user backed out of the Google flow;
+      // treat it the same as a fresh signed-out state, not an error.
+      if (identity == null) return null;
+      return _loadActiveProfile(identity.uid);
+    });
+  }
+
   Future<void> signOut() async {
     final authRepository = ref.read(authRepositoryProvider);
     await authRepository.signOut();

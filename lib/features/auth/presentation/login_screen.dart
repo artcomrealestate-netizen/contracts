@@ -1,8 +1,16 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'auth_controller.dart';
 import 'reset_password_screen.dart';
+
+/// google_sign_in has no Windows implementation; Windows users sign in with
+/// email/password only until a desktop-capable flow is added.
+bool get _googleSignInSupported =>
+    kIsWeb || Platform.isAndroid || Platform.isIOS;
 
 class LoginScreen extends ConsumerStatefulWidget {
   final String? errorMessage;
@@ -31,6 +39,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           email: _emailController.text.trim(),
           password: _passwordController.text,
         );
+  }
+
+  Future<void> _submitGoogle() async {
+    await ref.read(authControllerProvider.notifier).signInWithGoogle();
   }
 
   @override
@@ -106,6 +118,33 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ),
                     child: const Text('Forgot password?'),
                   ),
+                  if (_googleSignInSupported) ...[
+                    const SizedBox(height: 12),
+                    const Row(
+                      children: [
+                        Expanded(child: Divider()),
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 8),
+                          child: Text('or', style: TextStyle(color: Colors.grey)),
+                        ),
+                        Expanded(child: Divider()),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      key: const Key('googleSignInButton'),
+                      onPressed: isLoading ? null : _submitGoogle,
+                      icon: const Icon(Icons.g_mobiledata, size: 28),
+                      label: const Text('Sign in with Google'),
+                    ),
+                  ] else ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'Google sign-in is available on the web and mobile apps.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                    ),
+                  ],
                 ],
               ),
             ),

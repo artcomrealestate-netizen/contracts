@@ -18,6 +18,11 @@ abstract class AuthRepository {
     required String password,
   });
 
+  /// Returns `null` if the user backs out of the Google sign-in flow before
+  /// completing it — that's a no-op, not a failure worth surfacing as an
+  /// error banner.
+  Future<AuthIdentity?> signInWithGoogle();
+
   Future<void> signOut();
 
   Future<void> sendPasswordResetEmail(String email);

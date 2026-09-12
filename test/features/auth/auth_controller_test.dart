@@ -18,6 +18,12 @@ class FakeAuthRepository implements AuthRepository {
   /// FirebaseAuthException path does.
   final Map<String, ({String password, String uid})> credentials;
 
+  /// Set by a test to control what the next signInWithGoogle() call does:
+  /// an identity to "sign in" as, `null` to simulate the user cancelling,
+  /// or leave unset and set [googleSignInError] to simulate a failure.
+  AuthIdentity? nextGoogleIdentity;
+  Object? googleSignInError;
+
   FakeAuthRepository(this.credentials);
 
   @override
@@ -40,6 +46,16 @@ class FakeAuthRepository implements AuthRepository {
       throw const AppException(AppErrorCode.authRequired, 'Invalid email or password.');
     }
     final identity = AuthIdentity(uid: match.uid, email: email);
+    _current = identity;
+    _controller.add(identity);
+    return identity;
+  }
+
+  @override
+  Future<AuthIdentity?> signInWithGoogle() async {
+    if (googleSignInError != null) throw googleSignInError!;
+    final identity = nextGoogleIdentity;
+    if (identity == null) return null;
     _current = identity;
     _controller.add(identity);
     return identity;
@@ -154,6 +170,41 @@ void main() {
       expect(state.hasError, isTrue);
       expect((state.error as AppException).code, AppErrorCode.permissionDenied);
       expect(authRepo.signOutCalls, 1);
+    });
+
+    test('signInWithGoogle with an active profile resolves to that AppUser', () async {
+      final authRepo = FakeAuthRepository({})
+        ..nextGoogleIdentity = const AuthIdentity(uid: 'uid-google', email: 'g@example.com');
+      final container = ProviderContainer(overrides: [
+        authRepositoryProvider.overrideWithValue(authRepo),
+        userRepositoryProvider.overrideWithValue(FakeUserRepository({'uid-google': _user('uid-google')})),
+      ]);
+      addTearDown(container.dispose);
+      addTearDown(authRepo.dispose);
+
+      await container.read(authControllerProvider.future);
+      await container.read(authControllerProvider.notifier).signInWithGoogle();
+
+      final state = container.read(authControllerProvider);
+      expect(state.value?.id, 'uid-google');
+      expect(state.hasError, isFalse);
+    });
+
+    test('signInWithGoogle returns to signed-out with no error when the user cancels', () async {
+      final authRepo = FakeAuthRepository({}); // nextGoogleIdentity left null == cancelled
+      final container = ProviderContainer(overrides: [
+        authRepositoryProvider.overrideWithValue(authRepo),
+        userRepositoryProvider.overrideWithValue(FakeUserRepository({})),
+      ]);
+      addTearDown(container.dispose);
+      addTearDown(authRepo.dispose);
+
+      await container.read(authControllerProvider.future);
+      await container.read(authControllerProvider.notifier).signInWithGoogle();
+
+      final state = container.read(authControllerProvider);
+      expect(state.value, isNull);
+      expect(state.hasError, isFalse);
     });
 
     test('signOut clears state back to signed-out', () async {

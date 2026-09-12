@@ -1,12 +1,20 @@
 import 'package:firebase_auth/firebase_auth.dart' as fb;
+import 'package:google_sign_in/google_sign_in.dart' as google;
 
 import '../../../core/errors/app_exception.dart';
 import '../domain/auth_repository.dart';
 
 class FirebaseAuthRepository implements AuthRepository {
   final fb.FirebaseAuth _auth;
+  final google.GoogleSignIn _googleSignIn;
 
-  FirebaseAuthRepository(this._auth);
+  // initialize() must run exactly once before authenticate() and is async,
+  // so the first call (from either sign-in attempt) does the work and every
+  // later call just awaits that same future.
+  Future<void>? _googleSignInInit;
+
+  FirebaseAuthRepository(this._auth, {google.GoogleSignIn? googleSignIn})
+      : _googleSignIn = googleSignIn ?? google.GoogleSignIn.instance;
 
   AuthIdentity? _toIdentity(fb.User? user) {
     if (user == null) return null;
@@ -38,6 +46,43 @@ class FirebaseAuthRepository implements AuthRepository {
         );
       }
       return identity;
+    } on fb.FirebaseAuthException catch (e) {
+      throw AppException(
+        AppErrorCode.authRequired,
+        _messageFor(e.code),
+        cause: e,
+      );
+    }
+  }
+
+  @override
+  Future<AuthIdentity?> signInWithGoogle() async {
+    try {
+      await (_googleSignInInit ??= _googleSignIn.initialize());
+      final account = await _googleSignIn.authenticate();
+      final idToken = account.authentication.idToken;
+      if (idToken == null) {
+        throw const AppException(
+          AppErrorCode.internalError,
+          'Google sign-in did not return an identity token.',
+        );
+      }
+      final credential = fb.GoogleAuthProvider.credential(idToken: idToken);
+      final identity = _toIdentity((await _auth.signInWithCredential(credential)).user);
+      if (identity == null) {
+        throw const AppException(
+          AppErrorCode.internalError,
+          'Google sign-in succeeded but returned no user.',
+        );
+      }
+      return identity;
+    } on google.GoogleSignInException catch (e) {
+      if (e.code == google.GoogleSignInExceptionCode.canceled) return null;
+      throw AppException(
+        AppErrorCode.authRequired,
+        'Google sign-in failed (${e.code.name}).',
+        cause: e,
+      );
     } on fb.FirebaseAuthException catch (e) {
       throw AppException(
         AppErrorCode.authRequired,
