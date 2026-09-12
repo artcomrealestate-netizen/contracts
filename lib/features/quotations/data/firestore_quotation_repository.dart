@@ -25,15 +25,20 @@ class FirestoreQuotationRepository implements QuotationRepository {
   }
 
   @override
-  Future<String> reserveNextQuotaNumber() {
+  Future<String> reserveNextQuotaNumber() async {
     final year = DateTime.now().year;
     final counterRef = _firestore.collection('counters').doc('quotations_$year');
-    return _firestore.runTransaction<String>((transaction) async {
-      final snapshot = await transaction.get(counterRef);
-      final next = ((snapshot.data()?['count'] as num?)?.toInt() ?? 0) + 1;
-      transaction.set(counterRef, {'count': next}, SetOptions(merge: true));
-      return 'QT-$year-${next.toString().padLeft(3, '0')}';
-    });
+    // Avoids runTransaction() — see the longer comment in
+    // FirestoreContractRepository.createDraftContract for why: on this
+    // setup, every transaction reliably threw an unconverted native error
+    // client-side on Web regardless of the security rules' content. This
+    // uses FieldValue.increment() (a plain write, no transaction) followed
+    // by a read-back instead; the trade-off is a narrow race window between
+    // the increment and the read that a real transaction wouldn't have.
+    await counterRef.set({'count': FieldValue.increment(1)}, SetOptions(merge: true));
+    final snapshot = await counterRef.get();
+    final next = (snapshot.data()?['count'] as num).toInt();
+    return 'QT-$year-${next.toString().padLeft(3, '0')}';
   }
 
   @override

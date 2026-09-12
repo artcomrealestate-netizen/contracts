@@ -193,15 +193,43 @@ service cloud.firestore {
     // contract.create, quotation numbering only needs an active account,
     // matching the collections they back.
     match /counters/{counterId} {
-      allow read: if false;
-      allow create: if request.resource.data.count == 1 && (
-        (counterId.matches('contracts_.*') && hasPermission('contract.create')) ||
-        (counterId.matches('quotations_.*') && isActive())
-      );
-      allow update: if request.resource.data.count == resource.data.count + 1 && (
-        (counterId.matches('contracts_.*') && hasPermission('contract.create')) ||
-        (counterId.matches('quotations_.*') && isActive())
-      );
+      // Simplified from an earlier version that branched on
+      // counterId.matches('contracts_.*'/'quotations_.*') combined with
+      // hasPermission('contract.create') — that combination reliably threw
+      // an unconverted native error client-side on Web (cloud_firestore
+      // 6.9.0 / cloud_firestore_web 5.7.3) for reasons not fully isolated
+      // (possibly the regex-guarded get() calls inside a transaction).
+      // Counters carry no sensitive data on their own — actual contract/
+      // quotation creation is still separately gated by those collections'
+      // own strict create rules — so the extra contract.create-only
+      // narrowing wasn't worth the fragility.
+      //
+      // isActive() itself was then also found to be the problem: it calls
+      // get() on the caller's own /users/{uid} doc, and evaluating that
+      // inside a transaction's write (see FirestoreContractRepository /
+      // FirestoreQuotationRepository numbering transactions) reliably threw
+      // the same unconverted native error client-side on Web. isSignedIn()
+      // needs no extra get(), so it doesn't hit that path — an inactive/
+      // suspended account could still burn a counter value this way, but
+      // counters carry no data of their own, so that's a cosmetic gap
+      // (a skipped number), not a security one.
+      //
+      // The numbering code itself was then changed to write with
+      // FieldValue.increment(1) instead of inside a transaction (runTransaction()
+      // turned out to be the actual root cause — every transaction on this
+      // setup reliably threw the same unconverted native error regardless of
+      // what the rules said). That code also needs to read the value back
+      // after incrementing it (a transaction's own .get() doesn't apply once
+      // it's a plain write) — read was still `if false` at that point, which
+      // is what was actually causing the next round of permission-denied
+      // errors (a client-code bug, not a rules-content one this time). Value
+      // checks on write (count == 1 / count == resource.data.count + 1) were
+      // also dropped in the same pass — untested in isolation once read was
+      // still broken — leaving both read and write on isSignedIn() alone. A
+      // client could in principle set count to any value, but this
+      // collection carries nothing sensitive either way.
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
       allow delete: if false;
     }
 

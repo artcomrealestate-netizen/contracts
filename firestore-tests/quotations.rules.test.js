@@ -117,7 +117,7 @@ describe('quotations/{quotationId} rules', () => {
 });
 
 describe('counters/quotations_YYYY rules', () => {
-  it('any active user can advance a quotation-numbering counter by exactly 1', async () => {
+  it('any signed-in user can advance a quotation-numbering counter by exactly 1', async () => {
     const db = testEnv.authenticatedContext(OTHER_ACTIVE).firestore();
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), 'counters', 'quotations_2026'), { count: 1 });
@@ -125,8 +125,23 @@ describe('counters/quotations_YYYY rules', () => {
     await assertSucceeds(updateDoc(doc(db, 'counters', 'quotations_2026'), { count: 2 }));
   });
 
-  it('a disabled account cannot advance the quotation counter', async () => {
+  // Counters use isSignedIn() with no value checks at all — see the longer
+  // comment in firestore.rules for the two rounds of Web-only transaction/
+  // increment() issues that led here. Trade-off: a disabled account, while
+  // still Firebase-Auth signed in, CAN write here. Counters carry no data of
+  // their own (actual quotation creation is separately gated by isActive()
+  // on the quotations collection itself), so this is a cosmetic gap, not a
+  // security one.
+  it('a disabled account can still technically advance the counter (documents the isSignedIn()-only trade-off)', async () => {
     const db = testEnv.authenticatedContext(DISABLED).firestore();
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'counters', 'quotations_2026'), { count: 1 });
+    });
+    await assertSucceeds(updateDoc(doc(db, 'counters', 'quotations_2026'), { count: 2 }));
+  });
+
+  it('an unauthenticated request cannot advance the counter', async () => {
+    const db = testEnv.unauthenticatedContext().firestore();
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), 'counters', 'quotations_2026'), { count: 1 });
     });

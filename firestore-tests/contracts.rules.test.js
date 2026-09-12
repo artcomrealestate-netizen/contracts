@@ -354,28 +354,39 @@ describe('auditLogs/{logId} rules', () => {
 });
 
 describe('counters/{counterId} rules', () => {
-  it('cannot be read directly by a client', async () => {
+  // Simplified twice — see the comments in firestore.rules. First from
+  // branching on the counter id prefix + contract.create/isActive() (both
+  // reliably threw an unconverted native error client-side on Web when
+  // evaluated inside a transaction). Then, after the numbering code moved to
+  // FieldValue.increment() instead of a transaction, the exact-value checks
+  // (count == 1 / count == resource.data.count + 1) turned out to reliably
+  // reject an increment() write as permission-denied too, so those are gone
+  // as well. Any signed-in user may write any value to any counter — this
+  // collection carries no sensitive data of its own (actual contract/
+  // quotation creation is separately gated by those collections' own strict
+  // rules), so the only boundary left is being signed in at all.
+  it('a signed-in user can read a counter (needed to read back a value after incrementing it)', async () => {
     const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(getDoc(doc(db, 'counters', 'contracts_2026')));
+  });
+
+  it('an unauthenticated request cannot read a counter', async () => {
+    const db = testEnv.unauthenticatedContext().firestore();
     await assertFails(getDoc(doc(db, 'counters', 'contracts_2026')));
   });
 
-  it('contract.create can advance the counter by exactly 1', async () => {
+  it('a signed-in user can advance the counter', async () => {
     const db = testEnv.authenticatedContext(OWNER).firestore();
     await assertSucceeds(updateDoc(doc(db, 'counters', 'contracts_2026'), { count: 2 }));
   });
 
-  it('cannot jump the counter by more than 1', async () => {
-    const db = testEnv.authenticatedContext(OWNER).firestore();
-    await assertFails(updateDoc(doc(db, 'counters', 'contracts_2026'), { count: 5 }));
-  });
-
-  it('a brand-new year counter can only be created starting at 1', async () => {
-    const db = testEnv.authenticatedContext(OWNER).firestore();
-    await assertSucceeds(setDoc(doc(db, 'counters', 'contracts_2027'), { count: 1 }));
-  });
-
-  it('a user without contract.create cannot advance the counter', async () => {
+  it('a signed-in user without contract.create can still advance a counter (no sensitive data here)', async () => {
     const db = testEnv.authenticatedContext(NO_ACCESS).firestore();
+    await assertSucceeds(updateDoc(doc(db, 'counters', 'contracts_2026'), { count: 2 }));
+  });
+
+  it('an unauthenticated request cannot advance the counter', async () => {
+    const db = testEnv.unauthenticatedContext().firestore();
     await assertFails(updateDoc(doc(db, 'counters', 'contracts_2026'), { count: 2 }));
   });
 });

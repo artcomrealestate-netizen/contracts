@@ -84,20 +84,38 @@ class _CreateContractScreenState extends ConsumerState<CreateContractScreen> {
     });
   }
 
+  // The inline banner sits at the top of a ListView that can scroll well
+  // past it (customer/property/template + a full clause list) — a SnackBar
+  // guarantees the message is seen immediately regardless of scroll position.
+  void _showError(String message) {
+    setState(() => _errorMessage = message);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-    if (_customerId == null || _propertyId == null || _templateId == null || _templateVersion == null) {
-      setState(() => _errorMessage = 'Select a customer, property, and template.');
+    if (!_formKey.currentState!.validate()) {
+      _showError('Some fields need attention — scroll up to find the ones marked "Required".');
       return;
     }
-    final currentUser = ref.read(authControllerProvider).value;
-    if (currentUser == null) return;
+    if (_customerId == null || _propertyId == null || _templateId == null || _templateVersion == null) {
+      _showError('Select a customer, property, and template.');
+      return;
+    }
 
     setState(() {
       _submitting = true;
       _errorMessage = null;
     });
     try {
+      // .future (not .value!) so this doesn't silently no-op if
+      // AuthController hasn't resolved its very first read yet.
+      final currentUser = await ref.read(authControllerProvider.future);
+      if (currentUser == null) {
+        _showError('Not signed in — please sign in again.');
+        return;
+      }
       final clauses = _clauseDrafts
           .map((draft) => ContractClause(
                 id: draft.id,
@@ -119,7 +137,7 @@ class _CreateContractScreenState extends ConsumerState<CreateContractScreen> {
           );
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
-      if (mounted) setState(() => _errorMessage = e.toString());
+      if (mounted) _showError(e.toString());
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

@@ -1251,6 +1251,34 @@ class _QuotaCalculatorScreenState extends ConsumerState<QuotaCalculatorScreen> {
   }
 
   Future<void> _generateAndSharePDF() async {
+    try {
+      await _generateAndSharePDFUnsafe();
+    } on FirebaseException catch (e, st) {
+      final detail = 'FirebaseException(${e.plugin}/${e.code}): ${e.message}';
+      debugPrint('PDF export / quotation save failed: $detail\nDart stack: $st');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(detail)));
+      }
+    } catch (e, st) {
+      // On web, a rejected JS promise (e.g. from the Firestore SDK) often
+      // surfaces here as a generic wrapper whose own toString() is useless;
+      // the real error/stack live on dynamic .error/.stack properties.
+      var detail = e.toString();
+      try {
+        final boxedError = (e as dynamic).error;
+        if (boxedError != null) detail = boxedError.toString();
+      } catch (_) {}
+      debugPrint('PDF export / quotation save failed [not a FirebaseException, '
+          'runtimeType=${e.runtimeType}]: $detail\nDart stack: $st');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $detail')),
+        );
+      }
+    }
+  }
+
+  Future<void> _generateAndSharePDFUnsafe() async {
     final settings = Provider.of<AppSettings>(context, listen: false);
     final quotationRepository = ref.read(quotationRepositoryProvider);
     // .future (not .value!) so this works even if AuthController hasn't
