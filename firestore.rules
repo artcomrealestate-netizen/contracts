@@ -65,8 +65,39 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // Everything else is deferred to later phases (contracts, templates,
-    // ...) and denied by default until those rules are added.
+    match /contractTemplates/{templateId} {
+      allow read: if hasPermission('template.read');
+      // A template is always created with currentVersion == 1 (its first
+      // version is written in the same batch by the client — see
+      // FirestoreTemplateRepository.createTemplate).
+      allow create: if hasPermission('template.create')
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.currentVersion == 1;
+      // template.edit may change metadata (name/code/status) but must never
+      // touch currentVersion; only template.publish may bump it, and only by
+      // exactly 1 (TDD §15: "a new template version is created instead of
+      // modifying a published version").
+      allow update: if (hasPermission('template.edit')
+                          && request.resource.data.currentVersion == resource.data.currentVersion)
+                      || (hasPermission('template.publish')
+                          && request.resource.data.currentVersion == resource.data.currentVersion + 1);
+      allow delete: if false;
+    }
+
+    match /contractTemplateVersions/{versionId} {
+      allow read: if hasPermission('template.read');
+      // version == 1 is the template's own first version, written alongside
+      // it under template.create; version > 1 is a later revision, which
+      // requires template.publish instead.
+      allow create: if request.resource.data.createdBy == request.auth.uid
+        && ((request.resource.data.version == 1 && hasPermission('template.create'))
+            || (request.resource.data.version > 1 && hasPermission('template.publish')));
+      // Immutable once created (TDD §15/§16) — no update or delete, ever.
+      allow update, delete: if false;
+    }
+
+    // Everything else is deferred to later phases (contracts, ...) and
+    // denied by default until those rules are added.
     match /{document=**} {
       allow read, write: if false;
     }

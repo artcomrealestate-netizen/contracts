@@ -25,6 +25,11 @@ class Permission {
   static const contractClone = 'contract.clone';
 
   // Template
+  // Not in TDD §12's RBAC list either (same gap as property.create above):
+  // create/edit/publish are listed but nothing gates reading a template, and
+  // §44's Recommended Screens puts "Templates" under Admin only — so this is
+  // granted to admin alongside the other template.* permissions for now.
+  static const templateRead = 'template.read';
   static const templateCreate = 'template.create';
   static const templateEdit = 'template.edit';
   static const templatePublish = 'template.publish';
@@ -66,6 +71,7 @@ class Permission {
       contractReject: true,
       contractFinalize: true,
       contractArchive: true,
+      templateRead: true,
       templateCreate: true,
       templateEdit: true,
       templatePublish: true,

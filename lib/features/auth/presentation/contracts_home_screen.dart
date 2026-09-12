@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../customers/presentation/customers_list_screen.dart';
 import '../../properties/presentation/properties_list_screen.dart';
+import '../../templates/presentation/templates_list_screen.dart';
 import '../domain/permission.dart';
 import 'auth_controller.dart';
 
@@ -63,6 +64,16 @@ class ContractsHomeScreen extends ConsumerWidget {
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const PropertiesListScreen()),
+                    ),
+                  ),
+                if (user?.hasPermission(Permission.templateRead) ?? false)
+                  ListTile(
+                    key: const Key('templatesMenuTile'),
+                    leading: const Icon(Icons.article_outlined),
+                    title: const Text('Contract Templates'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const TemplatesListScreen()),
                     ),
                   ),
                 const ListTile(
