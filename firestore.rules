@@ -214,6 +214,39 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // In-app notifications (TDD §32/§33) — no FCM push in this phase, see
+    // AppNotification's doc comment. Exactly one of userId/audiencePermission
+    // is set per document:
+    match /notifications/{notificationId} {
+      // Either addressed to this user directly, or a role-broadcast this
+      // user's own permissions qualify them for (e.g. contract.approve for
+      // a Submitted notice — the owner submitting doesn't have user.read to
+      // look up individual approver accounts, so it can't be addressed by
+      // userId).
+      allow read: if hasPermission('notification.read')
+        && (resource.data.userId == request.auth.uid
+            || (resource.data.userId == null
+                && resource.data.audiencePermission is string
+                && hasPermission(resource.data.audiencePermission)));
+
+      // Any active app user may create one — same trust level as counters/
+      // auditLogs (no sensitive data of its own, and the actor is never the
+      // addressee here so it can't be pinned to request.auth.uid the way
+      // auditLogs' actorId is).
+      allow create: if hasPermission('notification.read')
+        && ((request.resource.data.userId is string && request.resource.data.audiencePermission == null)
+            || (request.resource.data.userId == null && request.resource.data.audiencePermission is string));
+
+      // Only the addressee may flip isRead, and only that field — a
+      // broadcast notification has no single addressee, so it can never be
+      // marked read (see NotificationRepository.markAsRead's doc comment).
+      allow update: if hasPermission('notification.read')
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
+
+      allow delete: if false;
+    }
+
     // The pre-existing quotation calculator (unrelated to the Contract
     // System's RBAC) — every active signed-in user can read/create, and may
     // delete only their own. Never edited in place once created.

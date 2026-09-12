@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../auth/domain/permission.dart';
+import '../../notifications/domain/notification.dart';
 import '../domain/contract.dart';
 import '../domain/contract_clause.dart';
 import '../domain/contract_repository.dart';
@@ -15,6 +17,9 @@ class FirestoreContractRepository implements ContractRepository {
 
   CollectionReference<Map<String, dynamic>> get _auditLogs =>
       _firestore.collection('auditLogs');
+
+  CollectionReference<Map<String, dynamic>> get _notifications =>
+      _firestore.collection('notifications');
 
   Map<String, dynamic> _clauseToMap(ContractClause clause) => {
         'id': clause.id,
@@ -97,6 +102,29 @@ class FirestoreContractRepository implements ContractRepository {
       'toStatus': toStatus,
       'metadata': {},
       'timestamp': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // Exactly one of userId/audiencePermission is passed by each call site —
+  // see AppNotification's doc comment for why.
+  Future<void> _addNotification({
+    String? userId,
+    String? audiencePermission,
+    required NotificationType type,
+    required String title,
+    required String body,
+    required String contractId,
+  }) {
+    return _notifications.add({
+      'userId': userId,
+      'audiencePermission': audiencePermission,
+      'type': notificationTypeToString(type),
+      'title': title,
+      'body': body,
+      'entityType': 'contract',
+      'entityId': contractId,
+      'isRead': false,
+      'createdAt': FieldValue.serverTimestamp(),
     });
   }
 
@@ -198,6 +226,9 @@ class FirestoreContractRepository implements ContractRepository {
 
   @override
   Future<void> submitContract(String id, {required String actorId}) async {
+    final snapshot = await _contracts.doc(id).get();
+    final contractNumber = snapshot.data()?['contractNumber'] as String? ?? id;
+
     await _contracts.doc(id).update({
       'status': contractStatusToString(ContractStatus.pendingApproval),
       'submittedAt': FieldValue.serverTimestamp(),
@@ -209,6 +240,15 @@ class FirestoreContractRepository implements ContractRepository {
       actorId: actorId,
       fromStatus: 'DRAFT',
       toStatus: 'PENDING_APPROVAL',
+    );
+    // Broadcast, not addressed to one user — the submitter (an owner, not
+    // an admin) has no user.read to look up individual approver accounts.
+    await _addNotification(
+      audiencePermission: Permission.contractApprove,
+      type: NotificationType.contractSubmitted,
+      title: 'Contract Submitted',
+      body: 'Contract $contractNumber is awaiting your approval.',
+      contractId: id,
     );
   }
 
@@ -233,6 +273,13 @@ class FirestoreContractRepository implements ContractRepository {
       actorId: actorId,
       fromStatus: 'PENDING_APPROVAL',
       toStatus: 'APPROVED',
+    );
+    await _addNotification(
+      userId: snapshot.data()?['createdBy'] as String?,
+      type: NotificationType.contractApproved,
+      title: 'Contract Approved',
+      body: 'Contract ${snapshot.data()?['contractNumber'] ?? id} was approved.',
+      contractId: id,
     );
   }
 
@@ -275,6 +322,13 @@ class FirestoreContractRepository implements ContractRepository {
       fromStatus: 'PENDING_APPROVAL',
       toStatus: 'REJECTED',
     );
+    await _addNotification(
+      userId: snapshot.data()?['createdBy'] as String?,
+      type: NotificationType.contractRejected,
+      title: 'Contract Rejected',
+      body: 'Contract ${snapshot.data()?['contractNumber'] ?? id} was rejected: $generalNote',
+      contractId: id,
+    );
   }
 
   @override
@@ -297,6 +351,10 @@ class FirestoreContractRepository implements ContractRepository {
 
   @override
   Future<void> finalizeContract(String id, {required String actorId}) async {
+    final snapshot = await _contracts.doc(id).get();
+    final contractNumber = snapshot.data()?['contractNumber'] as String? ?? id;
+    final ownerId = snapshot.data()?['createdBy'] as String?;
+
     await _contracts.doc(id).update({
       'status': contractStatusToString(ContractStatus.finalized),
       'finalizedAt': FieldValue.serverTimestamp(),
@@ -309,6 +367,13 @@ class FirestoreContractRepository implements ContractRepository {
       actorId: actorId,
       fromStatus: 'APPROVED',
       toStatus: 'FINALIZED',
+    );
+    await _addNotification(
+      userId: ownerId,
+      type: NotificationType.contractFinalized,
+      title: 'Contract Finalized',
+      body: 'Contract $contractNumber was finalized.',
+      contractId: id,
     );
   }
 

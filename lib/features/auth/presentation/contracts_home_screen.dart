@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../contracts/presentation/contracts_list_screen.dart';
 import '../../customers/presentation/customers_list_screen.dart';
+import '../../notifications/presentation/notification_providers.dart';
+import '../../notifications/presentation/notifications_list_screen.dart';
 import '../../properties/presentation/properties_list_screen.dart';
 import '../../templates/presentation/templates_list_screen.dart';
 import '../domain/permission.dart';
@@ -24,6 +26,27 @@ class ContractsHomeScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Contract System'),
         actions: [
+          if (user?.hasPermission(Permission.notificationRead) ?? false)
+            Builder(builder: (context) {
+              // Badge counts unread personal notifications only — broadcast
+              // ones (Submitted) have no single-user read state to count,
+              // see NotificationRepository.markAsRead's doc comment.
+              final unreadCount = ref
+                  .watch(personalNotificationsProvider)
+                  .maybeWhen(data: (list) => list.where((n) => !n.isRead).length, orElse: () => 0);
+              return IconButton(
+                key: const Key('notificationsButton'),
+                icon: Badge(
+                  label: Text('$unreadCount'),
+                  isLabelVisible: unreadCount > 0,
+                  child: const Icon(Icons.notifications_outlined),
+                ),
+                tooltip: 'Notifications',
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const NotificationsListScreen()),
+                ),
+              );
+            }),
           IconButton(
             key: const Key('logoutButton'),
             icon: const Icon(Icons.logout),
