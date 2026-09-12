@@ -8,6 +8,9 @@ class Permission {
   static const customerRead = 'customer.read';
   static const customerCreate = 'customer.create';
   static const propertyRead = 'property.read';
+  // Not in TDD §12's RBAC list (only property.read is), but properties have
+  // to be created by someone — added at the same level as customer.create.
+  static const propertyCreate = 'property.create';
 
   // Contract
   static const contractCreate = 'contract.create';
@@ -45,6 +48,7 @@ class Permission {
       customerRead: true,
       customerCreate: true,
       propertyRead: true,
+      propertyCreate: true,
       contractCreate: true,
       contractRead: true,
       contractEditOwn: true,

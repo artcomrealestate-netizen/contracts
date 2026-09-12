@@ -25,6 +25,12 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    // Permission-map lookup (TDD §12/§40) — the authorization boundary for
+    // every collection below the `users` collection itself.
+    function hasPermission(perm) {
+      return isActive() && currentUserDoc().data.permissions[perm] == true;
+    }
+
     // Fields only an admin may set/change on a user document.
     function adminOnlyFieldsUnchanged() {
       return request.resource.data.role == resource.data.role
@@ -43,8 +49,24 @@ service cloud.firestore {
       allow update: if isOwnUserDoc(userId) && isActive() && adminOnlyFieldsUnchanged();
     }
 
-    // Everything else is deferred to later phases (customers, properties,
-    // contracts, ...) and denied by default until those rules are added.
+    match /customers/{customerId} {
+      allow read: if hasPermission('customer.read');
+      allow create: if hasPermission('customer.create')
+        && request.resource.data.createdBy == request.auth.uid;
+      // Edit/delete come with a later phase (contract linkage, audit trail);
+      // customers are create+read only for now.
+      allow update, delete: if false;
+    }
+
+    match /properties/{propertyId} {
+      allow read: if hasPermission('property.read');
+      allow create: if hasPermission('property.create')
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Everything else is deferred to later phases (contracts, templates,
+    // ...) and denied by default until those rules are added.
     match /{document=**} {
       allow read, write: if false;
     }
