@@ -35,12 +35,14 @@ class _AdminDashboardBody extends ConsumerWidget {
     return summaryAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, _) => Center(child: Text('Failed to load dashboard: $error')),
-      data: (summary) => GridView.count(
+      data: (summary) => GridView(
         padding: const EdgeInsets.all(16),
-        crossAxisCount: 2,
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        childAspectRatio: 1.4,
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 220,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 1.3,
+        ),
         children: [
           _DashboardTile(key: const Key('tile_pendingApprovals'), label: 'Pending Approvals', value: summary.pendingApprovals),
           _DashboardTile(key: const Key('tile_rejectedContracts'), label: 'Rejected Contracts', value: summary.rejectedContracts),
@@ -69,13 +71,15 @@ class _EmployeeDashboardBody extends ConsumerWidget {
       data: (summary) => ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          GridView.count(
+          GridView(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 2,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 1.4,
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 220,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 1.3,
+            ),
             children: [
               _DashboardTile(key: const Key('tile_myDrafts'), label: 'My Drafts', value: summary.myDrafts),
               _DashboardTile(key: const Key('tile_pendingApproval'), label: 'Pending Approval', value: summary.pendingApproval),
@@ -127,14 +131,25 @@ class _DashboardTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text('$value', style: Theme.of(context).textTheme.headlineMedium),
-            const SizedBox(height: 4),
-            Text(label, style: Theme.of(context).textTheme.bodySmall),
+            Text(
+              '$value',
+              textAlign: TextAlign.center,
+              style: Theme.of(context)
+                  .textTheme
+                  .displaySmall
+                  ?.copyWith(fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.primary),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
           ],
         ),
       ),
