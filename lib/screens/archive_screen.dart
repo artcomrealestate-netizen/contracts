@@ -2,28 +2,29 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
 import 'package:provider/provider.dart';
 
+import '../features/quotations/presentation/quotation_providers.dart';
 import '../main.dart';
 import '../models/saved_quotation.dart';
 import '../pdf/quotation_pdf_builder.dart';
-import '../services/archive_store.dart';
 
 String _twoDigits(int n) => n.toString().padLeft(2, '0');
 
 String formatQuotationDate(DateTime date) => '${date.year}-${_twoDigits(date.month)}-${_twoDigits(date.day)}';
 
-class ArchiveScreen extends StatefulWidget {
+class ArchiveScreen extends ConsumerStatefulWidget {
   final PdfSharer? pdfSharer;
   final AssetBundle? assetBundle;
 
   const ArchiveScreen({super.key, this.pdfSharer, this.assetBundle});
 
   @override
-  State<ArchiveScreen> createState() => _ArchiveScreenState();
+  ConsumerState<ArchiveScreen> createState() => _ArchiveScreenState();
 }
 
-class _ArchiveScreenState extends State<ArchiveScreen> {
+class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
   final _searchController = TextEditingController();
   String _query = '';
 
@@ -126,7 +127,6 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
 
   Future<void> _confirmDelete(SavedQuotation quotation) async {
     final strings = AppLocalizations.of(context);
-    final archive = Provider.of<ArchiveStore>(context, listen: false);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -146,19 +146,15 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
       ),
     );
     if (confirmed == true) {
-      await archive.delete(quotation.id);
+      await ref.read(quotationRepositoryProvider).delete(quotation.id);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final strings = AppLocalizations.of(context);
-    final archive = Provider.of<ArchiveStore>(context);
+    final quotationsAsync = ref.watch(quotationsStreamProvider);
     final query = _query.trim().toLowerCase();
-    final quotations = archive.quotations.where((q) {
-      if (query.isEmpty) return true;
-      return q.customerName.toLowerCase().contains(query) || q.quotaNumber.toLowerCase().contains(query);
-    }).toList();
 
     return Directionality(
       textDirection: strings.isArabic ? TextDirection.rtl : TextDirection.ltr,
@@ -184,65 +180,78 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
               ),
             ),
             Expanded(
-              child: quotations.isEmpty
-                  ? Center(child: Text(strings.noQuotations))
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      itemCount: quotations.length,
-                      itemBuilder: (context, index) {
-                        final quotation = quotations[index];
-                        return Card(
-                          key: Key('quotationCard_${quotation.id}'),
-                          margin: const EdgeInsets.only(bottom: 10),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(quotation.quotaNumber, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                    Text(formatQuotationDate(quotation.createdAt)),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Text(quotation.customerName, style: const TextStyle(fontSize: 16)),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '${strings.finalPrice}: ${formatAmount(quotation.finalPrice)} ${strings.currencySymbol}',
-                                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade900),
-                                ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    IconButton(
-                                      key: Key('shareButton_${quotation.id}'),
-                                      icon: const Icon(Icons.ios_share),
-                                      tooltip: strings.shareQuotation,
-                                      onPressed: () => _shareQuotation(quotation),
-                                    ),
-                                    IconButton(
-                                      key: Key('loadButton_${quotation.id}'),
-                                      icon: const Icon(Icons.edit_document),
-                                      tooltip: strings.loadQuotation,
-                                      onPressed: () => Navigator.of(context).pop(quotation),
-                                    ),
-                                    IconButton(
-                                      key: Key('deleteButton_${quotation.id}'),
-                                      icon: const Icon(Icons.delete_outline),
-                                      tooltip: strings.delete,
-                                      onPressed: () => _confirmDelete(quotation),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
+              child: quotationsAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (error, _) => Center(child: Text('Failed to load: $error')),
+                data: (allQuotations) {
+                  final quotations = allQuotations.where((q) {
+                    if (query.isEmpty) return true;
+                    return q.customerName.toLowerCase().contains(query) ||
+                        q.quotaNumber.toLowerCase().contains(query);
+                  }).toList();
+
+                  if (quotations.isEmpty) {
+                    return Center(child: Text(strings.noQuotations));
+                  }
+                  return ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    itemCount: quotations.length,
+                    itemBuilder: (context, index) {
+                      final quotation = quotations[index];
+                      return Card(
+                        key: Key('quotationCard_${quotation.id}'),
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(quotation.quotaNumber, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  Text(formatQuotationDate(quotation.createdAt)),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(quotation.customerName, style: const TextStyle(fontSize: 16)),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${strings.finalPrice}: ${formatAmount(quotation.finalPrice)} ${strings.currencySymbol}',
+                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade900),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  IconButton(
+                                    key: Key('shareButton_${quotation.id}'),
+                                    icon: const Icon(Icons.ios_share),
+                                    tooltip: strings.shareQuotation,
+                                    onPressed: () => _shareQuotation(quotation),
+                                  ),
+                                  IconButton(
+                                    key: Key('loadButton_${quotation.id}'),
+                                    icon: const Icon(Icons.edit_document),
+                                    tooltip: strings.loadQuotation,
+                                    onPressed: () => Navigator.of(context).pop(quotation),
+                                  ),
+                                  IconButton(
+                                    key: Key('deleteButton_${quotation.id}'),
+                                    icon: const Icon(Icons.delete_outline),
+                                    tooltip: strings.delete,
+                                    onPressed: () => _confirmDelete(quotation),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
-                        );
-                      },
-                    ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
             ),
           ],
         ),

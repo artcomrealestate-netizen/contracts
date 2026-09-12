@@ -5,7 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart' show ProviderScope;
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, Consumer;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:printing/printing.dart';
@@ -13,12 +13,15 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/config/environment.dart';
-import 'features/auth/presentation/splash_screen.dart';
+import 'features/auth/presentation/auth_controller.dart';
+import 'features/auth/presentation/contracts_home_screen.dart';
+import 'features/auth/presentation/login_screen.dart';
+import 'features/quotations/data/local_quotation_migrator.dart';
+import 'features/quotations/presentation/quotation_providers.dart';
 import 'models/quotation_template.dart';
 import 'models/saved_quotation.dart';
 import 'pdf/quotation_pdf_builder.dart';
 import 'screens/archive_screen.dart';
-import 'services/archive_store.dart';
 import 'services/template_store.dart';
 
 abstract class LogoPicker {
@@ -389,29 +392,30 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final settings = await AppSettings.load();
   final templateStore = await TemplateStore.load();
-  final archiveStore = await ArchiveStore.load();
-  // The calculator itself needs no backend, so a Firebase init failure
-  // (offline, misconfigured project, ...) must not take down the whole app
-  // — only the new "Contract System" entry point depends on it.
+  // Quotations now live in Firestore (createdBy-scoped, see
+  // features/quotations), so unlike before, the whole app — not just the
+  // Contract System module — needs a working Firebase connection.
+  Object? firebaseInitError;
   try {
     await Firebase.initializeApp(options: Environment.firebaseOptions);
-  } catch (_) {
-    // Contract System entry point will surface its own error when opened.
+  } catch (e) {
+    firebaseInitError = e;
   }
   runApp(ProviderScope(
     child: MultiProvider(
       providers: [
         ChangeNotifierProvider<AppSettings>.value(value: settings),
         ChangeNotifierProvider<TemplateStore>.value(value: templateStore),
-        ChangeNotifierProvider<ArchiveStore>.value(value: archiveStore),
       ],
-      child: const QuotaApp(),
+      child: QuotaApp(firebaseInitError: firebaseInitError),
     ),
   ));
 }
 
 class QuotaApp extends StatelessWidget {
-  const QuotaApp({super.key});
+  final Object? firebaseInitError;
+
+  const QuotaApp({super.key, this.firebaseInitError});
 
   @override
   Widget build(BuildContext context) {
@@ -431,24 +435,92 @@ class QuotaApp extends StatelessWidget {
             colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
             useMaterial3: true,
           ),
-          home: const QuotaCalculatorScreen(),
+          home: firebaseInitError != null
+              ? _FirebaseInitErrorScreen(error: firebaseInitError!)
+              : const _AppRoot(),
         );
       },
     );
   }
 }
 
-class QuotaCalculatorScreen extends StatefulWidget {
+class _FirebaseInitErrorScreen extends StatelessWidget {
+  final Object error;
+
+  const _FirebaseInitErrorScreen({required this.error});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            'Could not connect to the server. Check your internet connection and restart the app.\n\n$error',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The whole app is now auth-gated (login is mandatory — the quotation
+/// archive lives in Firestore, not just the Contract System module).
+class _AppRoot extends ConsumerWidget {
+  const _AppRoot();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authControllerProvider);
+    return authState.when(
+      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (error, _) => LoginScreen(errorMessage: error.toString()),
+      data: (user) {
+        if (user == null) return const LoginScreen();
+        return _MigrateAndShowCalculator(userId: user.id);
+      },
+    );
+  }
+}
+
+/// One-time, fire-and-forget import of any quotations this device saved
+/// locally before quotation storage moved to Firestore (see
+/// LocalQuotationMigrator) — the calculator itself doesn't wait on it.
+class _MigrateAndShowCalculator extends ConsumerStatefulWidget {
+  final String userId;
+
+  const _MigrateAndShowCalculator({required this.userId});
+
+  @override
+  ConsumerState<_MigrateAndShowCalculator> createState() => _MigrateAndShowCalculatorState();
+}
+
+class _MigrateAndShowCalculatorState extends ConsumerState<_MigrateAndShowCalculator> {
+  @override
+  void initState() {
+    super.initState();
+    LocalQuotationMigrator().migrateIfNeeded(
+      repository: ref.read(quotationRepositoryProvider),
+      migratedByUid: widget.userId,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => const QuotaCalculatorScreen();
+}
+
+class QuotaCalculatorScreen extends ConsumerStatefulWidget {
   final PdfSharer? pdfSharer;
   final AssetBundle? assetBundle;
 
   const QuotaCalculatorScreen({super.key, this.pdfSharer, this.assetBundle});
 
   @override
-  State<QuotaCalculatorScreen> createState() => _QuotaCalculatorScreenState();
+  ConsumerState<QuotaCalculatorScreen> createState() => _QuotaCalculatorScreenState();
 }
 
-class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
+class _QuotaCalculatorScreenState extends ConsumerState<QuotaCalculatorScreen> {
   final _customerNameController = TextEditingController();
   final _roomQuantityController = TextEditingController();
   final _priceMonthController = TextEditingController();
@@ -1180,7 +1252,12 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
 
   Future<void> _generateAndSharePDF() async {
     final settings = Provider.of<AppSettings>(context, listen: false);
-    final archive = Provider.of<ArchiveStore>(context, listen: false);
+    final quotationRepository = ref.read(quotationRepositoryProvider);
+    // .future (not .value!) so this works even if AuthController hasn't
+    // finished its very first resolve yet — it always has by the time a
+    // real user reaches this screen (behind _AppRoot's login gate), but
+    // waiting properly here costs nothing and removes the assumption.
+    final currentUserId = (await ref.read(authControllerProvider.future))!.id;
     final bundle = widget.assetBundle ?? rootBundle;
     final isWarehouse = _contractType == 'warehouse';
     final quantity = isWarehouse
@@ -1217,40 +1294,44 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
       shabraNumbers: isWarehouse ? shabraNumbers : null,
     );
 
-    await archive.add(SavedQuotation(
-      id: DateTime.now().microsecondsSinceEpoch.toString(),
-      quotaNumber: archive.nextQuotaNumber(),
-      customerName: _customerNameController.text,
-      createdAt: DateTime.now(),
-      roomType: _selectedRoomType,
-      contractType: _contractType,
-      quantity: quantity,
-      priceMonth: double.tryParse(_priceMonthController.text) ?? 0,
-      vat: _vatAmount,
-      vatPercent: vatPercent,
-      cd: isWarehouse ? 0 : _cdAmount,
-      camera: _cameraAmount,
-      includeCd: _includeCd,
-      includeCamera: _includeCamera,
-      service: service,
-      managementPercent: managementPercent,
-      deposit: isWarehouse ? 0 : _depositAmount,
-      industrialDepositPercent: double.tryParse(_industrialDepositPercentController.text) ?? 10,
-      contractMonths: _contractMonths,
-      numberOfPayments: _numberOfPayments,
-      yearlyPrice: _yearlyPrice,
-      finalPrice: _finalPrice,
-      khana: khana,
-      shabraNumbers: shabraNumbers,
-      shabraCount: quantity,
-      area: double.tryParse(_areaController.text) ?? 0,
-      pricePerSqft: double.tryParse(_pricePerSqftController.text) ?? 0,
-      warehouseDepositPercent: double.tryParse(_warehouseDepositPercentController.text) ?? 10,
-      civilDefensePerShabraRate: double.tryParse(_civilDefensePerShabraController.text) ?? 1000,
-      contractCertFee: double.tryParse(_contractCertFeeController.text) ?? 160,
-      hemayaInsuranceRate: double.tryParse(_hemayaInsuranceController.text) ?? 1500,
-      hemayaContractFeeRate: double.tryParse(_hemayaContractFeeController.text) ?? 500,
-    ));
+    final quotaNumber = await quotationRepository.reserveNextQuotaNumber();
+    await quotationRepository.add(
+      SavedQuotation(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        quotaNumber: quotaNumber,
+        customerName: _customerNameController.text,
+        createdAt: DateTime.now(),
+        roomType: _selectedRoomType,
+        contractType: _contractType,
+        quantity: quantity,
+        priceMonth: double.tryParse(_priceMonthController.text) ?? 0,
+        vat: _vatAmount,
+        vatPercent: vatPercent,
+        cd: isWarehouse ? 0 : _cdAmount,
+        camera: _cameraAmount,
+        includeCd: _includeCd,
+        includeCamera: _includeCamera,
+        service: service,
+        managementPercent: managementPercent,
+        deposit: isWarehouse ? 0 : _depositAmount,
+        industrialDepositPercent: double.tryParse(_industrialDepositPercentController.text) ?? 10,
+        contractMonths: _contractMonths,
+        numberOfPayments: _numberOfPayments,
+        yearlyPrice: _yearlyPrice,
+        finalPrice: _finalPrice,
+        khana: khana,
+        shabraNumbers: shabraNumbers,
+        shabraCount: quantity,
+        area: double.tryParse(_areaController.text) ?? 0,
+        pricePerSqft: double.tryParse(_pricePerSqftController.text) ?? 0,
+        warehouseDepositPercent: double.tryParse(_warehouseDepositPercentController.text) ?? 10,
+        civilDefensePerShabraRate: double.tryParse(_civilDefensePerShabraController.text) ?? 1000,
+        contractCertFee: double.tryParse(_contractCertFeeController.text) ?? 160,
+        hemayaInsuranceRate: double.tryParse(_hemayaInsuranceController.text) ?? 1500,
+        hemayaContractFeeRate: double.tryParse(_hemayaContractFeeController.text) ?? 500,
+      ),
+      createdBy: currentUserId,
+    );
 
     final sharer = widget.pdfSharer ?? PrintingPdfSharer();
     await sharer.sharePdf(bytes: bytes, filename: 'Quotation_${_customerNameController.text}.pdf');
@@ -1291,7 +1372,7 @@ class _QuotaCalculatorScreenState extends State<QuotaCalculatorScreen> {
             icon: const Icon(Icons.gavel_outlined),
             onPressed: () {
               Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ContractSystemRoot()),
+                MaterialPageRoute(builder: (_) => const ContractsHomeScreen()),
               );
             },
             tooltip: strings.isArabic ? 'نظام العقود' : 'Contract System',

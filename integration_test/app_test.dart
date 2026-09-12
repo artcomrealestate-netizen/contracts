@@ -9,14 +9,21 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:provider/provider.dart';
+import 'package:qouta_calculator/features/auth/domain/app_user.dart';
+import 'package:qouta_calculator/features/auth/domain/auth_repository.dart';
+import 'package:qouta_calculator/features/auth/presentation/auth_providers.dart';
+import 'package:qouta_calculator/features/quotations/presentation/quotation_providers.dart';
 import 'package:qouta_calculator/main.dart';
 import 'package:qouta_calculator/models/quotation_template.dart';
-import 'package:qouta_calculator/services/archive_store.dart';
 import 'package:qouta_calculator/services/template_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../test/test_support/fake_auth_support.dart';
+import '../test/test_support/fake_quotation_repository.dart';
 
 class _FakePdfSharer implements PdfSharer {
   int callCount = 0;
@@ -89,8 +96,24 @@ void main() {
         companyWebsite: '',
       );
       final templateStore = TemplateStore.withTemplates(const [template]);
-      final archiveStore = ArchiveStore.withQuotations(const []);
+      final quotationRepository = FakeQuotationRepository(const []);
       final fakeSharer = _FakePdfSharer();
+
+      const testUid = 'integration-test-uid';
+      final authRepo = FakeAuthRepository(
+        const {},
+        initialIdentity: const AuthIdentity(uid: testUid, email: 'test@test.com'),
+      );
+      final userRepo = FakeUserRepository({
+        testUid: const AppUser(
+          id: testUid,
+          email: 'test@test.com',
+          displayName: 'Integration Test User',
+          role: UserRole.employee,
+          status: AccountStatus.active,
+          permissions: {},
+        ),
+      });
 
       final logoBytes = Uint8List.fromList(_tinyPngBytes);
       final regularFontBytes = File('assets/fonts/Tajawal-Regular.ttf').readAsBytesSync();
@@ -102,22 +125,28 @@ void main() {
       });
 
       await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider<AppSettings>.value(value: settings),
-            ChangeNotifierProvider<TemplateStore>.value(value: templateStore),
-            ChangeNotifierProvider<ArchiveStore>.value(value: archiveStore),
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(authRepo),
+            userRepositoryProvider.overrideWithValue(userRepo),
+            quotationRepositoryProvider.overrideWithValue(quotationRepository),
           ],
-          child: MaterialApp(
-            debugShowCheckedModeBanner: false,
-            locale: const Locale('en'),
-            supportedLocales: const [Locale('en'), Locale('ar')],
-            localizationsDelegates: const [
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
+          child: MultiProvider(
+            providers: [
+              ChangeNotifierProvider<AppSettings>.value(value: settings),
+              ChangeNotifierProvider<TemplateStore>.value(value: templateStore),
             ],
-            home: QuotaCalculatorScreen(pdfSharer: fakeSharer, assetBundle: assetBundle),
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              locale: const Locale('en'),
+              supportedLocales: const [Locale('en'), Locale('ar')],
+              localizationsDelegates: const [
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              home: QuotaCalculatorScreen(pdfSharer: fakeSharer, assetBundle: assetBundle),
+            ),
           ),
         ),
       );
@@ -142,9 +171,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // 4. Confirm it was saved to the archive and a PDF was produced.
-      expect(archiveStore.quotations.length, 1);
-      expect(archiveStore.quotations.single.customerName, 'Integration Test Customer');
-      expect(archiveStore.quotations.single.quotaNumber, startsWith('QT-'));
+      expect(quotationRepository.quotations.length, 1);
+      expect(quotationRepository.quotations.single.customerName, 'Integration Test Customer');
+      expect(quotationRepository.quotations.single.quotaNumber, startsWith('QT-'));
 
       expect(fakeSharer.callCount, 1);
       expect(fakeSharer.lastFilename, 'Quotation_Integration Test Customer.pdf');

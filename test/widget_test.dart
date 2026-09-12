@@ -3,15 +3,23 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:qouta_calculator/features/auth/domain/app_user.dart';
+import 'package:qouta_calculator/features/auth/domain/auth_repository.dart';
+import 'package:qouta_calculator/features/auth/presentation/auth_providers.dart';
+import 'package:qouta_calculator/features/quotations/domain/quotation_repository.dart';
+import 'package:qouta_calculator/features/quotations/presentation/quotation_providers.dart';
 import 'package:qouta_calculator/main.dart';
 import 'package:qouta_calculator/models/quotation_template.dart';
 import 'package:qouta_calculator/models/saved_quotation.dart';
 import 'package:qouta_calculator/screens/archive_screen.dart';
-import 'package:qouta_calculator/services/archive_store.dart';
 import 'package:qouta_calculator/services/template_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'test_support/fake_auth_support.dart';
+import 'test_support/fake_quotation_repository.dart';
 
 class FakePdfSharer implements PdfSharer {
   int callCount = 0;
@@ -64,41 +72,66 @@ class TestAssetBundle extends CachingAssetBundle {
   }
 }
 
+const _testUid = 'test-uid';
+
 Widget wrapWithApp(
   Widget child, {
   Locale locale = const Locale('en'),
   AppSettings? settings,
   TemplateStore? templateStore,
-  ArchiveStore? archiveStore,
+  QuotationRepository? quotationRepository,
 }) {
-  return MultiProvider(
-    providers: [
-      ChangeNotifierProvider<AppSettings>.value(
-        value: settings ??
-            AppSettings(
-              locale: locale,
-              companyName: 'Test Co',
-              companyPhone: '0000000000',
-              companyEmail: 'test@test.com',
-              companyWebsite: '',
-            ),
-      ),
-      ChangeNotifierProvider<TemplateStore>.value(
-        value: templateStore ?? TemplateStore.withTemplates(TemplateStore.defaultTemplates()),
-      ),
-      ChangeNotifierProvider<ArchiveStore>.value(
-        value: archiveStore ?? ArchiveStore.withQuotations(const []),
-      ),
+  // QuotaCalculatorScreen/ArchiveScreen assume an already-signed-in, active
+  // user (the real app only ever shows them behind the login gate in
+  // main.dart's _AppRoot) — these tests pump them directly, so the fake
+  // starts pre-authenticated rather than going through LoginScreen.
+  final authRepo = FakeAuthRepository(
+    const {},
+    initialIdentity: const AuthIdentity(uid: _testUid, email: 'test@test.com'),
+  );
+  final userRepo = FakeUserRepository({
+    _testUid: const AppUser(
+      id: _testUid,
+      email: 'test@test.com',
+      displayName: 'Test User',
+      role: UserRole.employee,
+      status: AccountStatus.active,
+      permissions: {},
+    ),
+  });
+
+  return ProviderScope(
+    overrides: [
+      authRepositoryProvider.overrideWithValue(authRepo),
+      userRepositoryProvider.overrideWithValue(userRepo),
+      quotationRepositoryProvider.overrideWithValue(quotationRepository ?? FakeQuotationRepository(const [])),
     ],
-    child: MaterialApp(
-      locale: locale,
-      supportedLocales: const [Locale('en'), Locale('ar')],
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
+    child: MultiProvider(
+      providers: [
+        ChangeNotifierProvider<AppSettings>.value(
+          value: settings ??
+              AppSettings(
+                locale: locale,
+                companyName: 'Test Co',
+                companyPhone: '0000000000',
+                companyEmail: 'test@test.com',
+                companyWebsite: '',
+              ),
+        ),
+        ChangeNotifierProvider<TemplateStore>.value(
+          value: templateStore ?? TemplateStore.withTemplates(TemplateStore.defaultTemplates()),
+        ),
       ],
-      home: child,
+      child: MaterialApp(
+        locale: locale,
+        supportedLocales: const [Locale('en'), Locale('ar')],
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: child,
+      ),
     ),
   );
 }
@@ -667,7 +700,7 @@ void main() {
 
   testWidgets('Exporting a PDF also saves an entry to the archive', (WidgetTester tester) async {
     final fakeSharer = FakePdfSharer();
-    final archiveStore = ArchiveStore.withQuotations(const []);
+    final quotationRepository = FakeQuotationRepository(const []);
 
     final logoBytes = Uint8List.fromList(tinyPngBytes);
     final regularFontBytes = File('assets/fonts/Tajawal-Regular.ttf').readAsBytesSync();
@@ -680,7 +713,7 @@ void main() {
 
     await tester.pumpWidget(wrapWithApp(
       QuotaCalculatorScreen(pdfSharer: fakeSharer, assetBundle: assetBundle),
-      archiveStore: archiveStore,
+      quotationRepository: quotationRepository,
     ));
 
     await tester.enterText(find.byKey(const Key('customerName')), 'أحمد محمود');
@@ -688,9 +721,9 @@ void main() {
     await tester.tap(find.text('Export PDF and Share'));
     await tester.pumpAndSettle();
 
-    expect(archiveStore.quotations.length, 1);
-    expect(archiveStore.quotations.single.customerName, 'أحمد محمود');
-    expect(archiveStore.quotations.single.quotaNumber, startsWith('QT-'));
+    expect(quotationRepository.quotations.length, 1);
+    expect(quotationRepository.quotations.single.customerName, 'أحمد محمود');
+    expect(quotationRepository.quotations.single.quotaNumber, startsWith('QT-'));
   });
 
   testWidgets('Loading a quotation from the archive populates the form', (WidgetTester tester) async {
@@ -710,11 +743,11 @@ void main() {
       yearlyPrice: 216000,
       finalPrice: 218740,
     );
-    final archiveStore = ArchiveStore.withQuotations([savedQuotation]);
+    final quotationRepository = FakeQuotationRepository([savedQuotation]);
 
     await tester.pumpWidget(wrapWithApp(
       const QuotaCalculatorScreen(),
-      archiveStore: archiveStore,
+      quotationRepository: quotationRepository,
     ));
 
     await tester.tap(find.byKey(const Key('archiveButton')));
@@ -753,11 +786,11 @@ void main() {
       yearlyPrice: 36000,
       finalPrice: 40818,
     );
-    final archiveStore = ArchiveStore.withQuotations([savedQuotation]);
+    final quotationRepository = FakeQuotationRepository([savedQuotation]);
 
     await tester.pumpWidget(wrapWithApp(
       const QuotaCalculatorScreen(),
-      archiveStore: archiveStore,
+      quotationRepository: quotationRepository,
     ));
 
     await tester.tap(find.byKey(const Key('archiveButton')));
@@ -798,12 +831,15 @@ void main() {
       yearlyPrice: 12000,
       finalPrice: 12000,
     );
-    final archiveStore = ArchiveStore.withQuotations([quotation]);
+    final quotationRepository = FakeQuotationRepository([quotation]);
 
     await tester.pumpWidget(wrapWithApp(
       const ArchiveScreen(),
-      archiveStore: archiveStore,
+      quotationRepository: quotationRepository,
     ));
+    // The quotation list now streams in (Firestore-backed), so its first
+    // value needs a pump to arrive — unlike the old synchronous ArchiveStore.
+    await tester.pump();
 
     expect(find.text('QT-2026-009'), findsOneWidget);
 
@@ -813,7 +849,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('QT-2026-009'), findsNothing);
-    expect(archiveStore.quotations, isEmpty);
+    expect(quotationRepository.quotations, isEmpty);
   });
 
   testWidgets('Notes fields are pre-filled with the default template when no custom notes are saved', (WidgetTester tester) async {
@@ -967,12 +1003,15 @@ void main() {
       yearlyPrice: 12000,
       finalPrice: 12000,
     );
-    final archiveStore = ArchiveStore.withQuotations([first, second]);
+    final quotationRepository = FakeQuotationRepository([first, second]);
 
     await tester.pumpWidget(wrapWithApp(
       const ArchiveScreen(),
-      archiveStore: archiveStore,
+      quotationRepository: quotationRepository,
     ));
+    // The quotation list now streams in (Firestore-backed), so its first
+    // value needs a pump to arrive — unlike the old synchronous ArchiveStore.
+    await tester.pump();
 
     expect(find.text('Ahmed Khaled'), findsOneWidget);
     expect(find.text('Sara Ali'), findsOneWidget);
@@ -1004,7 +1043,7 @@ void main() {
         numberOfPayments: 2,
       );
       final templateStore = TemplateStore.withTemplates(const [template]);
-      final archiveStore = ArchiveStore.withQuotations(const []);
+      final quotationRepository = FakeQuotationRepository(const []);
       final fakeSharer = FakePdfSharer();
 
       final logoBytes = Uint8List.fromList(tinyPngBytes);
@@ -1019,7 +1058,7 @@ void main() {
       await tester.pumpWidget(wrapWithApp(
         QuotaCalculatorScreen(pdfSharer: fakeSharer, assetBundle: assetBundle),
         templateStore: templateStore,
-        archiveStore: archiveStore,
+        quotationRepository: quotationRepository,
       ));
 
       // 1. Select the ready-made template from the dropdown.
@@ -1041,9 +1080,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // 4. Confirm it was saved to the archive and a PDF was produced.
-      expect(archiveStore.quotations.length, 1);
-      expect(archiveStore.quotations.single.customerName, 'Flow Test Customer');
-      expect(archiveStore.quotations.single.quotaNumber, startsWith('QT-'));
+      expect(quotationRepository.quotations.length, 1);
+      expect(quotationRepository.quotations.single.customerName, 'Flow Test Customer');
+      expect(quotationRepository.quotations.single.quotaNumber, startsWith('QT-'));
       expect(fakeSharer.callCount, 1);
       expect(fakeSharer.lastBytes, isNotNull);
     },

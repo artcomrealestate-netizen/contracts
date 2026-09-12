@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:qouta_calculator/main.dart';
 import 'package:qouta_calculator/models/quotation_template.dart';
 import 'package:qouta_calculator/models/saved_quotation.dart';
-import 'package:qouta_calculator/services/archive_store.dart';
 import 'package:qouta_calculator/services/template_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -652,92 +651,6 @@ void main() {
 
       await store.delete('a');
       expect(store.templates, isEmpty);
-    });
-  });
-
-  group('ArchiveStore', () {
-    setUp(() {
-      SharedPreferences.setMockInitialValues({});
-    });
-
-    test('starts empty when nothing has been saved before', () async {
-      final store = await ArchiveStore.load();
-      expect(store.quotations, isEmpty);
-    });
-
-    test('a newly saved quotation survives a simulated app restart', () async {
-      final firstSession = await ArchiveStore.load();
-      await firstSession.add(SavedQuotation(
-        id: 'restart-test',
-        quotaNumber: firstSession.nextQuotaNumber(),
-        customerName: 'Restart Customer',
-        createdAt: DateTime(2026, 1, 1),
-        roomType: 'Small',
-        quantity: 1,
-        priceMonth: 1000,
-        vat: 0,
-        cd: 0,
-        camera: 0,
-        deposit: 0,
-        numberOfPayments: 1,
-        yearlyPrice: 12000,
-        finalPrice: 12000,
-      ));
-
-      final secondSession = await ArchiveStore.load();
-      expect(secondSession.quotations.any((q) => q.id == 'restart-test'), isTrue);
-    });
-
-    test('nextQuotaNumber increments sequentially per year', () {
-      final store = ArchiveStore.withQuotations(const []);
-      final now = DateTime(2026, 1, 1);
-      expect(store.nextQuotaNumber(now: now), 'QT-2026-001');
-      expect(store.nextQuotaNumber(now: now), 'QT-2026-002');
-      expect(store.nextQuotaNumber(now: now), 'QT-2026-003');
-    });
-
-    test('add stores newest-first and delete removes by id', () async {
-      final store = ArchiveStore.withQuotations(const []);
-      final older = SavedQuotation(
-        id: '1',
-        quotaNumber: 'QT-2026-001',
-        customerName: 'First',
-        createdAt: DateTime(2026, 1, 1),
-        roomType: 'Small',
-        quantity: 1,
-        priceMonth: 1000,
-        vat: 0,
-        cd: 0,
-        camera: 0,
-        deposit: 0,
-        numberOfPayments: 1,
-        yearlyPrice: 12000,
-        finalPrice: 12000,
-      );
-      final newer = SavedQuotation(
-        id: '2',
-        quotaNumber: 'QT-2026-002',
-        customerName: 'Second',
-        createdAt: DateTime(2026, 2, 1),
-        roomType: 'Small',
-        quantity: 1,
-        priceMonth: 1000,
-        vat: 0,
-        cd: 0,
-        camera: 0,
-        deposit: 0,
-        numberOfPayments: 1,
-        yearlyPrice: 12000,
-        finalPrice: 12000,
-      );
-
-      await store.add(older);
-      await store.add(newer);
-
-      expect(store.quotations.map((q) => q.id).toList(), ['2', '1']);
-
-      await store.delete('2');
-      expect(store.quotations.map((q) => q.id).toList(), ['1']);
     });
   });
 

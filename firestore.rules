@@ -118,14 +118,32 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Logical per-year counters backing contract numbering (TDD §39) — never
-    // read by the client, only advanced by exactly 1 inside the transaction
-    // in FirestoreContractRepository.createDraftContract.
+    // The pre-existing quotation calculator (unrelated to the Contract
+    // System's RBAC) — every active signed-in user can read/create, and may
+    // delete only their own. Never edited in place once created.
+    match /quotations/{quotationId} {
+      allow read: if isActive();
+      allow create: if isActive() && request.resource.data.createdBy == request.auth.uid;
+      allow delete: if isActive() && resource.data.createdBy == request.auth.uid;
+      allow update: if false;
+    }
+
+    // Logical per-year counters (TDD §39) — never read by the client, only
+    // advanced by exactly 1 inside a transaction (FirestoreContractRepository
+    // for contracts_YYYY, FirestoreQuotationRepository for quotations_YYYY).
+    // Gating differs by which counter it is: contract numbering needs
+    // contract.create, quotation numbering only needs an active account,
+    // matching the collections they back.
     match /counters/{counterId} {
       allow read: if false;
-      allow create: if hasPermission('contract.create') && request.resource.data.count == 1;
-      allow update: if hasPermission('contract.create')
-        && request.resource.data.count == resource.data.count + 1;
+      allow create: if request.resource.data.count == 1 && (
+        (counterId.matches('contracts_.*') && hasPermission('contract.create')) ||
+        (counterId.matches('quotations_.*') && isActive())
+      );
+      allow update: if request.resource.data.count == resource.data.count + 1 && (
+        (counterId.matches('contracts_.*') && hasPermission('contract.create')) ||
+        (counterId.matches('quotations_.*') && isActive())
+      );
       allow delete: if false;
     }
 
