@@ -41,6 +41,16 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isAdmin() || (isOwnUserDoc(userId) && isActive());
 
+      // Self-signup: a signed-in user may create their own profile exactly
+      // once, pinned to a powerless starting state (employee/pending/no
+      // permissions) so they can never grant themselves access — only an
+      // admin's later write (via `allow write` below, from the Pending
+      // Users screen) can flip status to 'active' and assign role/permissions.
+      allow create: if isOwnUserDoc(userId)
+        && request.resource.data.status == 'pending'
+        && request.resource.data.role == 'employee'
+        && request.resource.data.permissions == {};
+
       // Admins manage any user document.
       allow write: if isAdmin();
 

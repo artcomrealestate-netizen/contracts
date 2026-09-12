@@ -1,6 +1,6 @@
 enum UserRole { employee, admin }
 
-enum AccountStatus { active, suspended, disabled }
+enum AccountStatus { pending, active, suspended, disabled }
 
 UserRole userRoleFromString(String value) {
   return UserRole.values.firstWhere(

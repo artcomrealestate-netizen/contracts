@@ -112,3 +112,90 @@ describe('users/{userId} rules', () => {
     );
   });
 });
+
+// Self-signup (allow create on users/{userId}): a newly signed-in user with
+// no Firestore profile yet may create exactly one powerless starting
+// document for themselves; approving/rejecting it is still an admin-only
+// `allow write` (covered above), not a separate rule.
+describe('self-signup create rule', () => {
+  const NEW_SIGNUP = 'new-signup-uid';
+
+  const pendingProfile = (overrides = {}) => ({
+    email: 'new@example.com',
+    displayName: 'New User',
+    role: 'employee',
+    status: 'pending',
+    permissions: {},
+    ...overrides,
+  });
+
+  it('a signed-in user can create their own pending profile with empty permissions', async () => {
+    const db = testEnv.authenticatedContext(NEW_SIGNUP).firestore();
+    await assertSucceeds(setDoc(doc(db, 'users', NEW_SIGNUP), pendingProfile()));
+  });
+
+  it('an unauthenticated request cannot self-signup', async () => {
+    const db = testEnv.unauthenticatedContext().firestore();
+    await assertFails(setDoc(doc(db, 'users', NEW_SIGNUP), pendingProfile()));
+  });
+
+  it('a user cannot create a profile for a different uid', async () => {
+    const db = testEnv.authenticatedContext(NEW_SIGNUP).firestore();
+    await assertFails(setDoc(doc(db, 'users', OTHER_EMPLOYEE), pendingProfile()));
+  });
+
+  it('self-signup cannot set status to active', async () => {
+    const db = testEnv.authenticatedContext(NEW_SIGNUP).firestore();
+    await assertFails(
+      setDoc(doc(db, 'users', NEW_SIGNUP), pendingProfile({ status: 'active' }))
+    );
+  });
+
+  it('self-signup cannot set role to admin', async () => {
+    const db = testEnv.authenticatedContext(NEW_SIGNUP).firestore();
+    await assertFails(
+      setDoc(doc(db, 'users', NEW_SIGNUP), pendingProfile({ role: 'admin' }))
+    );
+  });
+
+  it('self-signup cannot pre-grant permissions', async () => {
+    const db = testEnv.authenticatedContext(NEW_SIGNUP).firestore();
+    await assertFails(
+      setDoc(
+        doc(db, 'users', NEW_SIGNUP),
+        pendingProfile({ permissions: { 'contract.approve': true } })
+      )
+    );
+  });
+
+  it('a pending account cannot read or update itself once created', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users', NEW_SIGNUP), pendingProfile());
+    });
+    const db = testEnv.authenticatedContext(NEW_SIGNUP).firestore();
+    await assertFails(getDoc(doc(db, 'users', NEW_SIGNUP)));
+    await assertFails(updateDoc(doc(db, 'users', NEW_SIGNUP), { displayName: 'Trying to edit' }));
+  });
+
+  it('an admin can approve a pending account', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users', NEW_SIGNUP), pendingProfile());
+    });
+    const db = testEnv.authenticatedContext(ADMIN).firestore();
+    await assertSucceeds(
+      updateDoc(doc(db, 'users', NEW_SIGNUP), {
+        status: 'active',
+        role: 'employee',
+        permissions: { 'customer.read': true },
+      })
+    );
+  });
+
+  it('an admin can reject a pending account by disabling it', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users', NEW_SIGNUP), pendingProfile());
+    });
+    const db = testEnv.authenticatedContext(ADMIN).firestore();
+    await assertSucceeds(updateDoc(doc(db, 'users', NEW_SIGNUP), { status: 'disabled' }));
+  });
+});

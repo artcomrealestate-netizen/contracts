@@ -42,4 +42,50 @@ class FirestoreUserRepository implements UserRepository {
       return _fromDoc(doc);
     });
   }
+
+  @override
+  Future<void> createPendingUser({
+    required String uid,
+    required String email,
+    required String displayName,
+  }) {
+    return _users.doc(uid).set({
+      'email': email,
+      'displayName': displayName,
+      'role': 'employee',
+      'status': 'pending',
+      'permissions': <String, bool>{},
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  @override
+  Stream<List<AppUser>> watchPendingUsers() {
+    return _users.where('status', isEqualTo: 'pending').snapshots().map(
+          (snapshot) => snapshot.docs.map(_fromDoc).toList(),
+        );
+  }
+
+  @override
+  Future<void> approveUser(
+    String uid, {
+    required UserRole role,
+    required Map<String, bool> permissions,
+  }) {
+    return _users.doc(uid).update({
+      'status': 'active',
+      'role': role.name,
+      'permissions': permissions,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  @override
+  Future<void> rejectUser(String uid) {
+    return _users.doc(uid).update({
+      'status': 'disabled',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
 }

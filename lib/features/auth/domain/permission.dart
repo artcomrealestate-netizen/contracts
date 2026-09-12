@@ -54,8 +54,9 @@ class Permission {
   static const notificationRead = 'notification.read';
 
   /// Default permission set for a newly bootstrapped employee/admin account,
-  /// matching TDD §12. Used only for the manual first-admin bootstrap in
-  /// this phase (no user-management UI yet).
+  /// matching TDD §12. Used for the manual first-admin bootstrap
+  /// (docs/BOOTSTRAP_ADMIN.md) and as the default an admin grants when
+  /// approving a self-signed-up account from the Pending Users screen.
   static Map<String, bool> defaultsFor(bool isAdmin) {
     final employeeDefaults = <String, bool>{
       customerRead: true,

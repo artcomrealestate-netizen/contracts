@@ -36,6 +36,13 @@ class AuthController extends AsyncNotifier<AppUser?> {
         'No profile found for this account. Contact an administrator.',
       );
     }
+    if (profile.status == AccountStatus.pending) {
+      await authRepository.signOut();
+      throw const AppException(
+        AppErrorCode.permissionDenied,
+        'Your account is pending admin approval.',
+      );
+    }
     if (!profile.isActive) {
       await authRepository.signOut();
       throw const AppException(
@@ -54,6 +61,40 @@ class AuthController extends AsyncNotifier<AppUser?> {
         email: email,
         password: password,
       );
+      return _loadActiveProfile(identity.uid);
+    });
+  }
+
+  /// Self-signup: creates the Firebase Auth account plus its Firestore
+  /// profile, always landing on `status: pending` — `_loadActiveProfile`
+  /// then immediately turns that into the "pending admin approval" error
+  /// above, which the UI surfaces the same way a suspended/disabled account
+  /// would be (see LoginScreen/SignUpScreen).
+  Future<void> signUp({
+    required String email,
+    required String password,
+    required String displayName,
+  }) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      final authRepository = ref.read(authRepositoryProvider);
+      final userRepository = ref.read(userRepositoryProvider);
+      final identity = await authRepository.signUp(
+        email: email,
+        password: password,
+      );
+      try {
+        await userRepository.createPendingUser(
+          uid: identity.uid,
+          email: identity.email ?? email,
+          displayName: displayName,
+        );
+      } catch (_) {
+        // Don't leave a signed-in Auth session with no Firestore profile
+        // behind if the profile write itself failed.
+        await authRepository.signOut();
+        rethrow;
+      }
       return _loadActiveProfile(identity.uid);
     });
   }

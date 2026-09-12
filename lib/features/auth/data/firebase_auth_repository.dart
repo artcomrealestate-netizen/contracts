@@ -56,6 +56,33 @@ class FirebaseAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<AuthIdentity> signUp({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final credential = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      final identity = _toIdentity(credential.user);
+      if (identity == null) {
+        throw const AppException(
+          AppErrorCode.internalError,
+          'Account created but returned no user.',
+        );
+      }
+      return identity;
+    } on fb.FirebaseAuthException catch (e) {
+      throw AppException(
+        AppErrorCode.validationError,
+        _messageFor(e.code),
+        cause: e,
+      );
+    }
+  }
+
+  @override
   Future<AuthIdentity?> signInWithGoogle() async {
     try {
       await (_googleSignInInit ??= _googleSignIn.initialize());
@@ -118,6 +145,10 @@ class FirebaseAuthRepository implements AuthRepository {
         return 'Invalid email address.';
       case 'too-many-requests':
         return 'Too many attempts. Please try again later.';
+      case 'email-already-in-use':
+        return 'An account with this email already exists.';
+      case 'weak-password':
+        return 'Password is too weak. Use at least 6 characters.';
       default:
         return 'Authentication failed ($code).';
     }

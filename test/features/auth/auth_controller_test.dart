@@ -94,6 +94,86 @@ void main() {
       expect(authRepo.signOutCalls, 1);
     });
 
+    test('a pending account signing in gets a distinct "pending approval" message', () async {
+      final authRepo = FakeAuthRepository({
+        'pending@b.com': (password: 'pw', uid: 'uid-pending'),
+      });
+      final container = ProviderContainer(overrides: [
+        authRepositoryProvider.overrideWithValue(authRepo),
+        userRepositoryProvider.overrideWithValue(FakeUserRepository({
+          'uid-pending': _user('uid-pending', status: AccountStatus.pending),
+        })),
+      ]);
+      addTearDown(container.dispose);
+      addTearDown(authRepo.dispose);
+
+      await container.read(authControllerProvider.future);
+      await container.read(authControllerProvider.notifier).signIn(email: 'pending@b.com', password: 'pw');
+
+      final state = container.read(authControllerProvider);
+      expect(state.hasError, isTrue);
+      final error = state.error as AppException;
+      expect(error.code, AppErrorCode.permissionDenied);
+      expect(error.message, contains('pending'));
+      expect(authRepo.signOutCalls, 1);
+    });
+
+    test('signUp creates a pending profile and surfaces the pending-approval message', () async {
+      final authRepo = FakeAuthRepository({});
+      final userRepo = FakeUserRepository({});
+      final container = ProviderContainer(overrides: [
+        authRepositoryProvider.overrideWithValue(authRepo),
+        userRepositoryProvider.overrideWithValue(userRepo),
+      ]);
+      addTearDown(container.dispose);
+      addTearDown(authRepo.dispose);
+
+      await container.read(authControllerProvider.future);
+      await container.read(authControllerProvider.notifier).signUp(
+            email: 'new@b.com',
+            password: 'pw123',
+            displayName: 'New Person',
+          );
+
+      final state = container.read(authControllerProvider);
+      expect(state.hasError, isTrue);
+      final error = state.error as AppException;
+      expect(error.code, AppErrorCode.permissionDenied);
+      expect(error.message, contains('pending'));
+      // The Firestore profile was created with no access at all, and the
+      // Auth session was signed back out (mirrors _loadActiveProfile).
+      final created = userRepo.usersByUid.values.single;
+      expect(created.status, AccountStatus.pending);
+      expect(created.role, UserRole.employee);
+      expect(created.permissions, isEmpty);
+      expect(authRepo.signOutCalls, 1);
+    });
+
+    test('an approved (formerly pending) account can then sign in normally', () async {
+      final authRepo = FakeAuthRepository({
+        'approved@b.com': (password: 'pw', uid: 'uid-approved'),
+      });
+      final userRepo = FakeUserRepository({
+        'uid-approved': _user('uid-approved', status: AccountStatus.pending),
+      });
+      final container = ProviderContainer(overrides: [
+        authRepositoryProvider.overrideWithValue(authRepo),
+        userRepositoryProvider.overrideWithValue(userRepo),
+      ]);
+      addTearDown(container.dispose);
+      addTearDown(authRepo.dispose);
+
+      await userRepo.approveUser('uid-approved', role: UserRole.employee, permissions: {'customer.read': true});
+
+      await container.read(authControllerProvider.future);
+      await container.read(authControllerProvider.notifier).signIn(email: 'approved@b.com', password: 'pw');
+
+      final state = container.read(authControllerProvider);
+      expect(state.hasError, isFalse);
+      expect(state.value?.id, 'uid-approved');
+      expect(state.value?.hasPermission('customer.read'), isTrue);
+    });
+
     test('signInWithGoogle with an active profile resolves to that AppUser', () async {
       final authRepo = FakeAuthRepository({})
         ..nextGoogleIdentity = const AuthIdentity(uid: 'uid-google', email: 'g@example.com');

@@ -18,6 +18,15 @@ abstract class AuthRepository {
     required String password,
   });
 
+  /// Creates a new Firebase Auth account and returns its identity. The
+  /// caller (AuthController.signUp) is responsible for creating the
+  /// matching `users/{uid}` Firestore profile — self-signup accounts always
+  /// start `status: pending`, awaiting admin approval.
+  Future<AuthIdentity> signUp({
+    required String email,
+    required String password,
+  });
+
   /// Returns `null` if the user backs out of the Google sign-in flow before
   /// completing it — that's a no-op, not a failure worth surfacing as an
   /// error banner.

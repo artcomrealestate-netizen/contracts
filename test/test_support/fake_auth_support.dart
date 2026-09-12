@@ -52,6 +52,27 @@ class FakeAuthRepository implements AuthRepository {
     return identity;
   }
 
+  /// uid -> email for accounts created via signUp(), so a test can assert
+  /// what got created without needing a real Firestore fake.
+  final Map<String, String> signedUpEmails = {};
+  int _nextSignUpUid = 0;
+
+  @override
+  Future<AuthIdentity> signUp({required String email, required String password}) async {
+    if (credentials.containsKey(email) || signedUpEmails.containsValue(email)) {
+      throw const AppException(
+        AppErrorCode.validationError,
+        'An account with this email already exists.',
+      );
+    }
+    final uid = 'signup-uid-${_nextSignUpUid++}';
+    signedUpEmails[uid] = email;
+    final identity = AuthIdentity(uid: uid, email: email);
+    _current = identity;
+    _controller.add(identity);
+    return identity;
+  }
+
   @override
   Future<AuthIdentity?> signInWithGoogle() async {
     if (googleSignInError != null) throw googleSignInError!;
@@ -85,4 +106,63 @@ class FakeUserRepository implements UserRepository {
 
   @override
   Stream<AppUser?> watchUser(String uid) => Stream.value(usersByUid[uid]);
+
+  @override
+  Future<void> createPendingUser({
+    required String uid,
+    required String email,
+    required String displayName,
+  }) async {
+    usersByUid[uid] = AppUser(
+      id: uid,
+      email: email,
+      displayName: displayName,
+      role: UserRole.employee,
+      status: AccountStatus.pending,
+      permissions: const {},
+    );
+  }
+
+  @override
+  Stream<List<AppUser>> watchPendingUsers() => Stream.value(
+        usersByUid.values.where((u) => u.status == AccountStatus.pending).toList(),
+      );
+
+  @override
+  Future<void> approveUser(
+    String uid, {
+    required UserRole role,
+    required Map<String, bool> permissions,
+  }) async {
+    final existing = usersByUid[uid];
+    if (existing == null) return;
+    usersByUid[uid] = AppUser(
+      id: existing.id,
+      email: existing.email,
+      displayName: existing.displayName,
+      role: role,
+      status: AccountStatus.active,
+      permissions: permissions,
+      createdAt: existing.createdAt,
+      updatedAt: existing.updatedAt,
+      lastLoginAt: existing.lastLoginAt,
+    );
+  }
+
+  @override
+  Future<void> rejectUser(String uid) async {
+    final existing = usersByUid[uid];
+    if (existing == null) return;
+    usersByUid[uid] = AppUser(
+      id: existing.id,
+      email: existing.email,
+      displayName: existing.displayName,
+      role: existing.role,
+      status: AccountStatus.disabled,
+      permissions: existing.permissions,
+      createdAt: existing.createdAt,
+      updatedAt: existing.updatedAt,
+      lastLoginAt: existing.lastLoginAt,
+    );
+  }
 }

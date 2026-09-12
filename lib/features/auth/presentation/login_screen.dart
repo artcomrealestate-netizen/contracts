@@ -8,6 +8,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/inline_banner.dart';
 import 'auth_controller.dart';
 import 'reset_password_screen.dart';
+import 'signup_screen.dart';
 
 /// google_sign_in has no Windows implementation; Windows users sign in with
 /// email/password only until a desktop-capable flow is added.
@@ -117,6 +118,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 ),
                               ),
                       child: const Text('Forgot password?'),
+                    ),
+                    TextButton(
+                      key: const Key('goToSignUpButton'),
+                      onPressed: isLoading
+                          ? null
+                          : () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const SignUpScreen(),
+                                ),
+                              ),
+                      child: const Text("Don't have an account? Sign Up"),
                     ),
                     if (_googleSignInSupported) ...[
                       const SizedBox(height: AppSpacing.sm),

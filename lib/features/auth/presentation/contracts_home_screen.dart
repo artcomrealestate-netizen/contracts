@@ -10,6 +10,7 @@ import '../../properties/presentation/properties_list_screen.dart';
 import '../../templates/presentation/templates_list_screen.dart';
 import '../domain/permission.dart';
 import 'auth_controller.dart';
+import 'pending_users_screen.dart';
 
 /// Landing screen for the auth-gated Contract System module — see
 /// docs/Contract_System_TDD_v1.1_EN.md §68 for the phase order this grew in.
@@ -117,6 +118,16 @@ class ContractsHomeScreen extends ConsumerWidget {
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const ContractsListScreen()),
+                    ),
+                  ),
+                if (user?.hasPermission(Permission.userManage) ?? false)
+                  ListTile(
+                    key: const Key('pendingUsersMenuTile'),
+                    leading: const Icon(Icons.person_add_alt_outlined),
+                    title: const Text('Pending Users'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const PendingUsersScreen()),
                     ),
                   ),
               ],
