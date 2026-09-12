@@ -161,8 +161,6 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(strings.archiveTitle),
-          backgroundColor: Colors.blue.shade700,
-          foregroundColor: Colors.white,
         ),
         body: Column(
           children: [
@@ -208,19 +206,25 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(quotation.quotaNumber, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                      if (quotation.renumberedFrom != null)
-                                        Text(
-                                          'Originally ${quotation.renumberedFrom} — renumbered on migration',
-                                          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                                        ),
-                                    ],
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(quotation.quotaNumber, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                        if (quotation.renumberedFrom != null)
+                                          Text(
+                                            'Originally ${quotation.renumberedFrom} — renumbered on migration',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
                                   ),
+                                  const SizedBox(width: 8),
                                   Text(formatQuotationDate(quotation.createdAt)),
                                 ],
                               ),
@@ -229,7 +233,10 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
                               const SizedBox(height: 4),
                               Text(
                                 '${strings.finalPrice}: ${formatAmount(quotation.finalPrice)} ${strings.currencySymbol}',
-                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade900),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
                               ),
                               const SizedBox(height: 4),
                               Row(

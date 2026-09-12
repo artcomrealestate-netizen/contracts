@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/config/environment.dart';
+import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/auth_controller.dart';
 import 'features/auth/presentation/contracts_home_screen.dart';
 import 'features/auth/presentation/login_screen.dart';
@@ -431,10 +432,9 @@ class QuotaApp extends StatelessWidget {
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          theme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-            useMaterial3: true,
-          ),
+          theme: AppTheme.light,
+          darkTheme: AppTheme.dark,
+          themeMode: ThemeMode.system,
           home: firebaseInitError != null
               ? _FirebaseInitErrorScreen(error: firebaseInitError!)
               : const _AppRoot(),
@@ -933,6 +933,7 @@ class _QuotaCalculatorScreenState extends ConsumerState<QuotaCalculatorScreen> {
               child: DropdownButtonFormField<String>(
                 key: const Key('propertyTypeDropdown'),
                 initialValue: _selectedRoomType,
+                isExpanded: true,
                 decoration: InputDecoration(labelText: strings.propertyType),
                 items: ['Small', 'Medium', 'Large', 'Warehouse', 'Shop'].map((type) {
                   return DropdownMenuItem(value: type, child: Text(type));
@@ -1373,9 +1374,6 @@ class _QuotaCalculatorScreenState extends ConsumerState<QuotaCalculatorScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(strings.appTitle),
-        centerTitle: true,
-        backgroundColor: Colors.blue.shade700,
-        foregroundColor: Colors.white,
         actions: [
           IconButton(
             key: const Key('helpButton'),
@@ -1504,6 +1502,7 @@ class _QuotaCalculatorScreenState extends ConsumerState<QuotaCalculatorScreen> {
                       DropdownButtonFormField<String>(
                         key: const Key('contractTypeDropdown'),
                         initialValue: _contractType,
+                        isExpanded: true,
                         decoration: InputDecoration(labelText: strings.contractTypeLabel),
                         items: [
                           DropdownMenuItem(value: 'residential', child: Text(strings.residentialContract)),
@@ -1527,6 +1526,7 @@ class _QuotaCalculatorScreenState extends ConsumerState<QuotaCalculatorScreen> {
                       DropdownButtonFormField<int>(
                         key: const Key('numberOfPaymentsDropdown'),
                         initialValue: _numberOfPayments,
+                        isExpanded: true,
                         decoration: InputDecoration(labelText: strings.numberOfPaymentsLabel),
                         items: _availablePaymentCounts
                             .map((count) => DropdownMenuItem(
@@ -1546,8 +1546,8 @@ class _QuotaCalculatorScreenState extends ConsumerState<QuotaCalculatorScreen> {
               ),
               const SizedBox(height: 20),
               Card(
-                color: Colors.blue.shade50,
-                elevation: 3,
+                color: Theme.of(context).colorScheme.primaryContainer,
+                elevation: 0,
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
@@ -1571,8 +1571,8 @@ class _QuotaCalculatorScreenState extends ConsumerState<QuotaCalculatorScreen> {
                 icon: const Icon(Icons.picture_as_pdf),
                 label: Text(strings.exportPdf),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green.shade700,
-                  foregroundColor: Colors.white,
+                  backgroundColor: AppStatusColors.of(context).success,
+                  foregroundColor: AppStatusColors.of(context).onSuccess,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
@@ -1585,6 +1585,7 @@ class _QuotaCalculatorScreenState extends ConsumerState<QuotaCalculatorScreen> {
   }
 
   Widget _buildResultRow(String label, String value, {bool isBold = false}) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
@@ -1595,7 +1596,14 @@ class _QuotaCalculatorScreenState extends ConsumerState<QuotaCalculatorScreen> {
             child: Text(label, style: TextStyle(fontWeight: isBold ? FontWeight.bold : FontWeight.normal, fontSize: isBold ? 16 : 14)),
           ),
           const SizedBox(width: 8),
-          Text(value, style: TextStyle(fontWeight: isBold ? FontWeight.bold : FontWeight.normal, fontSize: isBold ? 16 : 14, color: isBold ? Colors.blue.shade900 : Colors.black)),
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+              fontSize: isBold ? 16 : 14,
+              color: isBold ? colorScheme.primary : colorScheme.onSurface,
+            ),
+          ),
         ],
       ),
     );
@@ -1816,7 +1824,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(strings.settingsTitle),
-          backgroundColor: Colors.blue.shade700,
         ),
         body: SingleChildScrollView(
           padding: EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 16.0 + MediaQuery.of(context).padding.bottom + 80.0),
@@ -1945,7 +1952,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       Text(strings.notesAndConditions, style: const TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 4),
-                      Text(strings.notesHelperText, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                      Text(
+                        strings.notesHelperText,
+                        style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
                       const SizedBox(height: 12),
                       TextField(
                         key: const Key('notesArField'),
@@ -1980,8 +1990,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ElevatedButton(
                         onPressed: _saveSettings,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue.shade700,
-                          foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         ),

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../domain/contract_clause.dart';
@@ -74,7 +76,9 @@ class _RejectContractDialogState extends State<_RejectContractDialog> {
       content: Form(
         key: _formKey,
         child: SizedBox(
-          width: 400,
+          // AlertDialog insets 40px off each side of the screen by default —
+          // a fixed 400 overflows on any phone-width viewport.
+          width: math.min(400, MediaQuery.sizeOf(context).width - 80),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,

@@ -3,6 +3,8 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart' as legacy_provider;
 
+import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/inline_banner.dart';
 import '../../../main.dart';
 import '../../../pdf/contract_pdf_builder.dart';
 import '../../auth/domain/permission.dart';
@@ -172,16 +174,7 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
             padding: const EdgeInsets.all(16),
             children: [
               if (_errorMessage != null) ...[
-                Container(
-                  key: const Key('contractActionErrorBanner'),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.shade200),
-                  ),
-                  child: Text(_errorMessage!, style: TextStyle(color: Colors.red.shade900)),
-                ),
+                InlineBanner(key: const Key('contractActionErrorBanner'), message: _errorMessage!),
                 const SizedBox(height: 16),
               ],
               Text(contract.contractNumber, style: Theme.of(context).textTheme.titleLarge),
@@ -193,9 +186,13 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
                       data: (customers) => DropdownButtonFormField<String>(
                         key: const Key('contractDetailCustomerDropdown'),
                         initialValue: _selectedCustomerId,
+                        isExpanded: true,
                         decoration: const InputDecoration(labelText: 'Customer'),
                         items: customers
-                            .map((c) => DropdownMenuItem(value: c.id, child: Text(c.displayName)))
+                            .map((c) => DropdownMenuItem(
+                                  value: c.id,
+                                  child: Text(c.displayName, overflow: TextOverflow.ellipsis),
+                                ))
                             .toList(),
                         onChanged: (value) => setState(() => _selectedCustomerId = value),
                         validator: (value) => value == null ? 'Required' : null,
@@ -208,9 +205,14 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
                       data: (properties) => DropdownButtonFormField<String>(
                         key: const Key('contractDetailPropertyDropdown'),
                         initialValue: _selectedPropertyId,
+                        isExpanded: true,
                         decoration: const InputDecoration(labelText: 'Property'),
-                        items:
-                            properties.map((p) => DropdownMenuItem(value: p.id, child: Text(p.name))).toList(),
+                        items: properties
+                            .map((p) => DropdownMenuItem(
+                                  value: p.id,
+                                  child: Text(p.name, overflow: TextOverflow.ellipsis),
+                                ))
+                            .toList(),
                         onChanged: (value) => setState(() => _selectedPropertyId = value),
                         validator: (value) => value == null ? 'Required' : null,
                       ),
@@ -249,14 +251,9 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
               _DetailRow(label: 'Template Version', value: 'v${contract.templateVersion}'),
               if (contract.status == ContractStatus.rejected && contract.rejection != null) ...[
                 const SizedBox(height: 12),
-                Container(
+                InlineBanner.content(
                   key: const Key('rejectionInfoBanner'),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange.shade200),
-                  ),
+                  severity: BannerSeverity.warning,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -309,12 +306,18 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
                                 // Still shows locked, but a flagged clause is
                                 // editable below despite the icon — greyed
                                 // out to hint it's not really blocking here.
-                                color: _isClauseEditable(clause) ? Colors.grey.shade400 : null,
+                                color: _isClauseEditable(clause)
+                                    ? Theme.of(context).colorScheme.onSurfaceVariant
+                                    : null,
                               ),
                             if (clause.reviewStatus == ClauseReviewStatus.needsRevision)
-                              const Padding(
-                                padding: EdgeInsets.only(left: 6),
-                                child: Icon(Icons.flag, size: 16, color: Colors.orange),
+                              Padding(
+                                padding: const EdgeInsets.only(left: 6),
+                                child: Icon(
+                                  Icons.flag,
+                                  size: 16,
+                                  color: AppStatusColors.of(context).onWarningContainer,
+                                ),
                               ),
                           ],
                         ),
@@ -333,7 +336,10 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
                           const SizedBox(height: 4),
                           Text(
                             'Needs revision: ${clause.rejectionNote}',
-                            style: const TextStyle(color: Colors.orange, fontStyle: FontStyle.italic),
+                            style: TextStyle(
+                              color: AppStatusColors.of(context).onWarningContainer,
+                              fontStyle: FontStyle.italic,
+                            ),
                           ),
                         ],
                       ],
@@ -408,7 +414,10 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
                 const SizedBox(height: 8),
                 ElevatedButton.icon(
                   key: const Key('finalizeContractButton'),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700, foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppStatusColors.of(context).success,
+                    foregroundColor: AppStatusColors.of(context).onSuccess,
+                  ),
                   onPressed: _busy
                       ? null
                       : () => _run(() => ref

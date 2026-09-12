@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/inline_banner.dart';
 import 'auth_controller.dart';
 import 'reset_password_screen.dart';
 
@@ -50,102 +52,104 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final authState = ref.watch(authControllerProvider);
     final isLoading = authState.isLoading;
 
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Contract System Login')),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (widget.errorMessage != null) ...[
-                    Container(
-                      key: const Key('loginErrorBanner'),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.red.shade200),
-                      ),
-                      child: Text(
-                        widget.errorMessage!,
-                        style: TextStyle(color: Colors.red.shade900),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  TextFormField(
-                    key: const Key('loginEmailField'),
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(labelText: 'Email'),
-                    validator: (value) =>
-                        (value == null || value.trim().isEmpty) ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    key: const Key('loginPasswordField'),
-                    controller: _passwordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(labelText: 'Password'),
-                    validator: (value) =>
-                        (value == null || value.isEmpty) ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 20),
-                  ElevatedButton(
-                    key: const Key('loginSubmitButton'),
-                    onPressed: isLoading ? null : _submit,
-                    child: isLoading
-                        ? const SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Sign In'),
-                  ),
-                  TextButton(
-                    key: const Key('forgotPasswordButton'),
-                    onPressed: isLoading
-                        ? null
-                        : () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const ResetPasswordScreen(),
-                              ),
-                            ),
-                    child: const Text('Forgot password?'),
-                  ),
-                  if (_googleSignInSupported) ...[
-                    const SizedBox(height: 12),
-                    const Row(
-                      children: [
-                        Expanded(child: Divider()),
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 8),
-                          child: Text('or', style: TextStyle(color: Colors.grey)),
-                        ),
-                        Expanded(child: Divider()),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      key: const Key('googleSignInButton'),
-                      onPressed: isLoading ? null : _submitGoogle,
-                      icon: const Icon(Icons.g_mobiledata, size: 28),
-                      label: const Text('Sign in with Google'),
-                    ),
-                  ] else ...[
-                    const SizedBox(height: 12),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(AppSpacing.xl),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Icon(Icons.description_outlined, size: 48, color: colorScheme.primary),
+                    const SizedBox(height: AppSpacing.md),
                     Text(
-                      'Google sign-in is available on the web and mobile apps.',
+                      'Contract System',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
                     ),
+                    const SizedBox(height: AppSpacing.xxl),
+                    if (widget.errorMessage != null) ...[
+                      InlineBanner(key: const Key('loginErrorBanner'), message: widget.errorMessage!),
+                      const SizedBox(height: AppSpacing.lg),
+                    ],
+                    TextFormField(
+                      key: const Key('loginEmailField'),
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(labelText: 'Email'),
+                      validator: (value) =>
+                          (value == null || value.trim().isEmpty) ? 'Required' : null,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    TextFormField(
+                      key: const Key('loginPasswordField'),
+                      controller: _passwordController,
+                      obscureText: true,
+                      decoration: const InputDecoration(labelText: 'Password'),
+                      validator: (value) =>
+                          (value == null || value.isEmpty) ? 'Required' : null,
+                    ),
+                    const SizedBox(height: AppSpacing.xl),
+                    ElevatedButton(
+                      key: const Key('loginSubmitButton'),
+                      onPressed: isLoading ? null : _submit,
+                      child: isLoading
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Sign In'),
+                    ),
+                    TextButton(
+                      key: const Key('forgotPasswordButton'),
+                      onPressed: isLoading
+                          ? null
+                          : () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const ResetPasswordScreen(),
+                                ),
+                              ),
+                      child: const Text('Forgot password?'),
+                    ),
+                    if (_googleSignInSupported) ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      Row(
+                        children: [
+                          const Expanded(child: Divider()),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                            child: Text('or', style: TextStyle(color: colorScheme.onSurfaceVariant)),
+                          ),
+                          const Expanded(child: Divider()),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      OutlinedButton.icon(
+                        key: const Key('googleSignInButton'),
+                        onPressed: isLoading ? null : _submitGoogle,
+                        icon: const Icon(Icons.g_mobiledata, size: 28),
+                        label: const Text('Sign in with Google'),
+                      ),
+                    ] else ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      Text(
+                        'Google sign-in is available on the web and mobile apps.',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: colorScheme.onSurfaceVariant),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),

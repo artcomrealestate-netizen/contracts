@@ -51,7 +51,9 @@ class NotificationsListScreen extends ConsumerWidget {
                   leading: Icon(
                     isUnread ? Icons.circle : Icons.circle_outlined,
                     size: 12,
-                    color: isUnread ? Theme.of(context).colorScheme.primary : Colors.grey.shade400,
+                    color: isUnread
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.outlineVariant,
                   ),
                   title: Text(
                     notification.title,

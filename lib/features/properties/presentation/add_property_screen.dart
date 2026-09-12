@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/inline_banner.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../domain/property.dart';
 import 'property_providers.dart';
@@ -110,16 +111,7 @@ class _AddPropertyScreenState extends ConsumerState<AddPropertyScreen> {
           padding: const EdgeInsets.all(16),
           children: [
             if (_errorMessage != null) ...[
-              Container(
-                key: const Key('addPropertyErrorBanner'),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.shade200),
-                ),
-                child: Text(_errorMessage!, style: TextStyle(color: Colors.red.shade900)),
-              ),
+              InlineBanner(key: const Key('addPropertyErrorBanner'), message: _errorMessage!),
               const SizedBox(height: 16),
             ],
             TextFormField(

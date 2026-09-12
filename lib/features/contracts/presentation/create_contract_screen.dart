@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/inline_banner.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../customers/presentation/customer_providers.dart';
 import '../../properties/presentation/property_providers.dart';
@@ -156,25 +157,20 @@ class _CreateContractScreenState extends ConsumerState<CreateContractScreen> {
           padding: const EdgeInsets.all(16),
           children: [
             if (_errorMessage != null) ...[
-              Container(
-                key: const Key('createContractErrorBanner'),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.shade200),
-                ),
-                child: Text(_errorMessage!, style: TextStyle(color: Colors.red.shade900)),
-              ),
+              InlineBanner(key: const Key('createContractErrorBanner'), message: _errorMessage!),
               const SizedBox(height: 16),
             ],
             customersAsync.when(
               data: (customers) => DropdownButtonFormField<String>(
                 key: const Key('contractCustomerDropdown'),
                 initialValue: _customerId,
+                isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Customer'),
                 items: customers
-                    .map((c) => DropdownMenuItem(value: c.id, child: Text(c.displayName)))
+                    .map((c) => DropdownMenuItem(
+                          value: c.id,
+                          child: Text(c.displayName, overflow: TextOverflow.ellipsis),
+                        ))
                     .toList(),
                 onChanged: (value) => setState(() => _customerId = value),
                 validator: (value) => value == null ? 'Required' : null,
@@ -187,8 +183,14 @@ class _CreateContractScreenState extends ConsumerState<CreateContractScreen> {
               data: (properties) => DropdownButtonFormField<String>(
                 key: const Key('contractPropertyDropdown'),
                 initialValue: _propertyId,
+                isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Property'),
-                items: properties.map((p) => DropdownMenuItem(value: p.id, child: Text(p.name))).toList(),
+                items: properties
+                    .map((p) => DropdownMenuItem(
+                          value: p.id,
+                          child: Text(p.name, overflow: TextOverflow.ellipsis),
+                        ))
+                    .toList(),
                 onChanged: (value) => setState(() => _propertyId = value),
                 validator: (value) => value == null ? 'Required' : null,
               ),
@@ -203,12 +205,13 @@ class _CreateContractScreenState extends ConsumerState<CreateContractScreen> {
                   data: (quotations) => DropdownButtonFormField<String?>(
                     key: const Key('sourceQuotationDropdown'),
                     initialValue: _sourceQuotationId,
+                    isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Source Quotation (optional)'),
                     items: [
                       const DropdownMenuItem<String?>(value: null, child: Text('None')),
                       ...quotations.map((q) => DropdownMenuItem<String?>(
                             value: q.id,
-                            child: Text('${q.quotaNumber} — ${q.customerName}'),
+                            child: Text('${q.quotaNumber} — ${q.customerName}', overflow: TextOverflow.ellipsis),
                           )),
                     ],
                     onChanged: (value) => setState(() => _sourceQuotationId = value),
@@ -223,9 +226,13 @@ class _CreateContractScreenState extends ConsumerState<CreateContractScreen> {
               data: (templates) => DropdownButtonFormField<String>(
                 key: const Key('contractTemplateDropdown'),
                 initialValue: _templateId,
+                isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Contract Template'),
                 items: templates
-                    .map((t) => DropdownMenuItem(value: t.id, child: Text('${t.name} (v${t.currentVersion})')))
+                    .map((t) => DropdownMenuItem(
+                          value: t.id,
+                          child: Text('${t.name} (v${t.currentVersion})', overflow: TextOverflow.ellipsis),
+                        ))
                     .toList(),
                 onChanged: _onTemplateSelected,
                 validator: (value) => value == null ? 'Required' : null,
