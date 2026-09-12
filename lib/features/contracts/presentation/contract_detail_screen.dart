@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart' as legacy_provider;
 
+import '../../../main.dart';
+import '../../../pdf/contract_pdf_builder.dart';
 import '../../auth/domain/permission.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../customers/presentation/customer_providers.dart';
@@ -73,6 +77,24 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
   bool _isClauseEditable(ContractClause clause) =>
       !clause.isLocked || clause.reviewStatus == ClauseReviewStatus.needsRevision;
 
+  Future<void> _exportPdf(Contract contract, String customerName, String propertyName) async {
+    final settings = legacy_provider.Provider.of<AppSettings>(context, listen: false);
+    final bytes = await buildContractPdfBytes(
+      settings: settings,
+      bundle: rootBundle,
+      contractNumber: contract.contractNumber,
+      statusLabel: contractStatusToString(contract.status),
+      customerName: customerName,
+      propertyName: propertyName,
+      templateVersion: contract.templateVersion,
+      clauses: contract.clauses,
+      createdAt: contract.createdAt,
+      submittedAt: contract.submittedAt,
+      approvedAt: contract.approvedAt,
+    );
+    await PrintingPdfSharer().sharePdf(bytes: bytes, filename: '${contract.contractNumber}.pdf');
+  }
+
   Future<void> _saveDraftClauses(Contract contract) async {
     final updated = contract.clauses
         .map((c) => ContractClause(
@@ -93,27 +115,49 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
     final contractAsync = ref.watch(contractByIdProvider(widget.contractId));
     final user = ref.watch(authControllerProvider).value;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Contract')),
-      body: contractAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text('Failed to load contract: $error')),
-        data: (contract) {
-          if (contract == null) return const Center(child: Text('Contract not found.'));
+    return contractAsync.when(
+      loading: () => const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, _) => Scaffold(
+        appBar: AppBar(title: const Text('Contract')),
+        body: Center(child: Text('Failed to load contract: $error')),
+      ),
+      data: (contract) {
+        if (contract == null) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('Contract')),
+            body: const Center(child: Text('Contract not found.')),
+          );
+        }
 
-          final isOwner = user != null && user.id == contract.createdBy;
-          final canSubmit = isOwner && contract.status == ContractStatus.draft && user.hasPermission(Permission.contractSubmit);
-          final canEditDraft = isOwner && contract.status == ContractStatus.draft && user.hasPermission(Permission.contractEditOwn);
-          final canRevise = isOwner && contract.status == ContractStatus.rejected && user.hasPermission(Permission.contractEditOwn);
-          final canApprove = contract.status == ContractStatus.pendingApproval && (user?.hasPermission(Permission.contractApprove) ?? false);
-          final canReject = contract.status == ContractStatus.pendingApproval && (user?.hasPermission(Permission.contractReject) ?? false);
+        final isOwner = user != null && user.id == contract.createdBy;
+        final canSubmit = isOwner && contract.status == ContractStatus.draft && user.hasPermission(Permission.contractSubmit);
+        final canEditDraft = isOwner && contract.status == ContractStatus.draft && user.hasPermission(Permission.contractEditOwn);
+        final canRevise = isOwner && contract.status == ContractStatus.rejected && user.hasPermission(Permission.contractEditOwn);
+        final canApprove = contract.status == ContractStatus.pendingApproval && (user?.hasPermission(Permission.contractApprove) ?? false);
+        final canReject = contract.status == ContractStatus.pendingApproval && (user?.hasPermission(Permission.contractReject) ?? false);
 
-          if (canEditDraft) _ensureEditingControllers(contract);
+        if (canEditDraft) _ensureEditingControllers(contract);
 
-          final customerAsync = ref.watch(customerByIdProvider(contract.customerId));
-          final propertyAsync = ref.watch(propertyByIdProvider(contract.propertyId));
+        final customerAsync = ref.watch(customerByIdProvider(contract.customerId));
+        final propertyAsync = ref.watch(propertyByIdProvider(contract.propertyId));
+        final customerName = customerAsync.value?.displayName ?? contract.customerId;
+        final propertyName = propertyAsync.value?.name ?? contract.propertyId;
 
-          return ListView(
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Contract'),
+            actions: [
+              IconButton(
+                key: const Key('exportContractPdfButton'),
+                icon: const Icon(Icons.picture_as_pdf_outlined),
+                tooltip: 'Export PDF',
+                onPressed: _busy ? null : () => _run(() => _exportPdf(contract, customerName, propertyName)),
+              ),
+            ],
+          ),
+          body: ListView(
             padding: const EdgeInsets.all(16),
             children: [
               if (_errorMessage != null) ...[
@@ -309,9 +353,9 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
                 ),
               ],
             ],
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }
