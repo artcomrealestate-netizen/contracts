@@ -46,8 +46,9 @@ Firestore document before it can be used at all.
    This mirrors `Permission.defaultsFor(true)` in
    `lib/features/auth/domain/permission.dart` — if that list changes, update
    this doc too. Note `property.create`, `template.read`, `customer.update`,
-   and `property.update` aren't in the TDD's own §12 RBAC list — see the
-   comments next to those constants for why they're granted anyway.
+   `property.update`, and (for employee accounts) `dashboard.read` aren't in
+   the TDD's own §12 RBAC list — see the comments next to those constants for
+   why they're granted anyway.
 
    There's no in-app way to grant a permission to an *existing* user either —
    if a new permission key is added after an account was already created
@@ -66,4 +67,5 @@ An `employee` account (for testing non-admin permission boundaries) is the
 same shape with `"role": "employee"` and `Permission.defaultsFor(false)`'s
 narrower set — everything above except `contract.edit_any`,
 `contract.approve`, `contract.reject`, `contract.finalize`,
-`contract.archive`, `template.*`, `user.*`, `audit.read`, `dashboard.read`.
+`contract.archive`, `template.*`, `user.*`, `audit.read`. (`dashboard.read`
+*is* included for employees — see the note above.)

@@ -47,6 +47,9 @@ class Permission {
   static const userRead = 'user.read';
   static const userManage = 'user.manage';
   static const auditRead = 'audit.read';
+  // TDD §12's RBAC table lists this admin-only, but §34's own "Employee"
+  // dashboard section needs it too — same gap pattern as customer.update
+  // above, granted to both here.
   static const dashboardRead = 'dashboard.read';
   static const notificationRead = 'notification.read';
 
@@ -69,6 +72,7 @@ class Permission {
       documentUpload: true,
       documentRead: true,
       notificationRead: true,
+      dashboardRead: true,
     };
     if (!isAdmin) return employeeDefaults;
     return {
@@ -85,7 +89,6 @@ class Permission {
       userRead: true,
       userManage: true,
       auditRead: true,
-      dashboardRead: true,
     };
   }
 }
