@@ -95,6 +95,7 @@ beforeEach(async () => {
         'contract.edit_any': true,
         'contract.approve': true,
         'contract.reject': true,
+        'contract.finalize': true,
       },
     });
     await setDoc(doc(db, 'users', AUDITOR), {
@@ -112,6 +113,7 @@ beforeEach(async () => {
       })
     );
     await setDoc(doc(db, 'contracts', 'existing-rejected'), baseContractData({ status: 'REJECTED' }));
+    await setDoc(doc(db, 'contracts', 'existing-approved'), baseContractData({ status: 'APPROVED' }));
     await setDoc(doc(db, 'counters', 'contracts_2026'), { count: 1 });
   });
 });
@@ -305,6 +307,59 @@ describe('contracts/{contractId} — revise a rejected contract', () => {
     // not isOwnerRevising — included to document that revise only applies
     // to a REJECTED starting state, not as a no-op alternate path.
     await assertSucceeds(updateDoc(doc(db, 'contracts', 'existing-draft'), { status: 'DRAFT' }));
+  });
+});
+
+describe('contracts/{contractId} — finalize (TDD §22/§23/§27)', () => {
+  it('an admin with contract.finalize can finalize an approved contract', async () => {
+    const db = testEnv.authenticatedContext(ADMIN).firestore();
+    await assertSucceeds(
+      updateDoc(doc(db, 'contracts', 'existing-approved'), {
+        status: 'FINALIZED',
+        finalizedBy: ADMIN,
+      })
+    );
+  });
+
+  it('cannot finalize while pretending to be a different finalizer', async () => {
+    const db = testEnv.authenticatedContext(ADMIN).firestore();
+    await assertFails(
+      updateDoc(doc(db, 'contracts', 'existing-approved'), {
+        status: 'FINALIZED',
+        finalizedBy: OWNER,
+      })
+    );
+  });
+
+  it('the owner (without contract.finalize) cannot finalize their own approved contract', async () => {
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      updateDoc(doc(db, 'contracts', 'existing-approved'), {
+        status: 'FINALIZED',
+        finalizedBy: OWNER,
+      })
+    );
+  });
+
+  it('cannot finalize a contract that is not currently APPROVED', async () => {
+    const db = testEnv.authenticatedContext(ADMIN).firestore();
+    await assertFails(
+      updateDoc(doc(db, 'contracts', 'existing-pending'), {
+        status: 'FINALIZED',
+        finalizedBy: ADMIN,
+      })
+    );
+  });
+
+  it('a finalized contract can never be updated again, even by an admin', async () => {
+    const db = testEnv.authenticatedContext(ADMIN).firestore();
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'contracts', 'existing-finalized'),
+        baseContractData({ status: 'FINALIZED', finalizedBy: ADMIN })
+      );
+    });
+    await assertFails(updateDoc(doc(db, 'contracts', 'existing-finalized'), { status: 'ARCHIVED' }));
   });
 });
 

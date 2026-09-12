@@ -75,6 +75,8 @@ class FirestoreContractRepository implements ContractRepository {
       submittedAt: (data['submittedAt'] as Timestamp?)?.toDate(),
       approvedAt: (data['approvedAt'] as Timestamp?)?.toDate(),
       approvedBy: data['approvedBy'] as String?,
+      finalizedAt: (data['finalizedAt'] as Timestamp?)?.toDate(),
+      finalizedBy: data['finalizedBy'] as String?,
       rejection: _rejectionFromMap((data['rejection'] as Map?)?.cast<String, dynamic>()),
     );
   }
@@ -283,6 +285,23 @@ class FirestoreContractRepository implements ContractRepository {
       actorId: actorId,
       fromStatus: 'REJECTED',
       toStatus: 'DRAFT',
+    );
+  }
+
+  @override
+  Future<void> finalizeContract(String id, {required String actorId}) async {
+    await _contracts.doc(id).update({
+      'status': contractStatusToString(ContractStatus.finalized),
+      'finalizedAt': FieldValue.serverTimestamp(),
+      'finalizedBy': actorId,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    await _addAuditLog(
+      contractId: id,
+      action: 'FINALIZED',
+      actorId: actorId,
+      fromStatus: 'APPROVED',
+      toStatus: 'FINALIZED',
     );
   }
 

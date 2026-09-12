@@ -162,12 +162,24 @@ service cloud.firestore {
           && request.resource.data.status == 'DRAFT';
       }
 
+      // Finalizing an approved contract (TDD §22/§23/§27) — content becomes
+      // immutable from here: no branch of this same allow-update lets
+      // anything through once status == 'FINALIZED' (every branch requires
+      // a specific status to move FROM, and none of them is FINALIZED).
+      function isFinalizing() {
+        return hasPermission('contract.finalize')
+          && resource.data.status == 'APPROVED'
+          && request.resource.data.status == 'FINALIZED'
+          && request.resource.data.finalizedBy == request.auth.uid;
+      }
+
       allow update: if contractCoreFieldsUnchanged()
         && (isOwnerEditingDraft()
             || isOwnerSubmitting()
             || isAdminApproving()
             || isAdminRejecting()
-            || isOwnerRevising());
+            || isOwnerRevising()
+            || isFinalizing());
 
       allow delete: if false;
     }

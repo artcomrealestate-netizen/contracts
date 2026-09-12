@@ -39,6 +39,11 @@ abstract class ContractRepository {
   /// REJECTED -> DRAFT so the owner can revise and resubmit (TDD §1/§22).
   Future<void> reviseRejectedContract(String id, {required String actorId});
 
+  /// APPROVED -> FINALIZED (TDD §22/§27) — content becomes immutable from
+  /// here (no update rule reaches a FINALIZED contract). Does not itself
+  /// generate/store a PDF (see the Contract class doc comment).
+  Future<void> finalizeContract(String id, {required String actorId});
+
   Future<Contract?> getContract(String id);
 
   /// Live single-contract view — used by the detail screen so a status

@@ -138,6 +138,7 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
         final canRevise = isOwner && contract.status == ContractStatus.rejected && user.hasPermission(Permission.contractEditOwn);
         final canApprove = contract.status == ContractStatus.pendingApproval && (user?.hasPermission(Permission.contractApprove) ?? false);
         final canReject = contract.status == ContractStatus.pendingApproval && (user?.hasPermission(Permission.contractReject) ?? false);
+        final canFinalize = contract.status == ContractStatus.approved && (user?.hasPermission(Permission.contractFinalize) ?? false);
 
         if (canEditDraft) _ensureEditingControllers(contract);
 
@@ -360,6 +361,20 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
                         ),
                       ),
                   ],
+                ),
+              ],
+              if (canFinalize) ...[
+                const SizedBox(height: 8),
+                ElevatedButton.icon(
+                  key: const Key('finalizeContractButton'),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700, foregroundColor: Colors.white),
+                  onPressed: _busy
+                      ? null
+                      : () => _run(() => ref
+                          .read(contractRepositoryProvider)
+                          .finalizeContract(contract.id, actorId: user!.id)),
+                  icon: const Icon(Icons.lock_outline),
+                  label: const Text('Finalize (locks the contract permanently)'),
                 ),
               ],
             ],

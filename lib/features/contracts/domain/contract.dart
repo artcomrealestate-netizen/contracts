@@ -47,11 +47,12 @@ String contractStatusToString(ContractStatus status) {
   }
 }
 
-/// Mirrors the `contracts/{contractId}` document (TDD §17). Fields that only
-/// matter from finalization on (finalizedAt, finalizedBy, finalPdfUrl,
-/// fileHash, snapshots, ...) aren't modeled here yet — they stay null on
-/// every document this phase writes, and get added to this class when
-/// Finalization/PDF (Implementation Order phase 8) lands.
+/// Mirrors the `contracts/{contractId}` document (TDD §17). finalPdfUrl/
+/// fileHash (a Firebase Storage upload + SHA-256 hash of the final document,
+/// per TDD §28) aren't modeled here — Finalize only flips status and records
+/// who/when, and the existing PDF export (any status, ContractDetailScreen's
+/// AppBar action) covers getting the document itself without adding a
+/// Storage bucket to what a fresh environment needs configured.
 class Contract {
   final String id;
   final String contractNumber;
@@ -69,6 +70,8 @@ class Contract {
   final DateTime? submittedAt;
   final DateTime? approvedAt;
   final String? approvedBy;
+  final DateTime? finalizedAt;
+  final String? finalizedBy;
   final Rejection? rejection;
 
   const Contract({
@@ -88,6 +91,8 @@ class Contract {
     this.submittedAt,
     this.approvedAt,
     this.approvedBy,
+    this.finalizedAt,
+    this.finalizedBy,
     this.rejection,
   });
 }
