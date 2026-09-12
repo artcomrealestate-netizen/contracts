@@ -12,3 +12,9 @@ final quotationRepositoryProvider = Provider<QuotationRepository>((ref) {
 final quotationsStreamProvider = StreamProvider<List<SavedQuotation>>((ref) {
   return ref.watch(quotationRepositoryProvider).watchQuotations();
 });
+
+/// Single-quotation lookup, e.g. to show a quotation's summary on a
+/// contract that only stores its sourceQuotationId.
+final quotationByIdProvider = FutureProvider.family<SavedQuotation?, String>((ref, id) {
+  return ref.watch(quotationRepositoryProvider).getQuotation(id);
+});

@@ -9,6 +9,7 @@ import '../../auth/domain/permission.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../customers/presentation/customer_providers.dart';
 import '../../properties/presentation/property_providers.dart';
+import '../../quotations/presentation/quotation_providers.dart';
 import '../domain/contract.dart';
 import '../domain/contract_clause.dart';
 import 'contract_providers.dart';
@@ -193,7 +194,16 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
                 ),
               ),
               if (contract.sourceQuotationId != null && contract.sourceQuotationId!.isNotEmpty)
-                _DetailRow(label: 'Source Quotation', value: contract.sourceQuotationId!),
+                _DetailRow(
+                  label: 'Source Quotation',
+                  value: ref.watch(quotationByIdProvider(contract.sourceQuotationId!)).when(
+                        data: (q) => q == null
+                            ? '${contract.sourceQuotationId} (not found)'
+                            : '${q.quotaNumber} — ${q.customerName} — ${formatAmount(q.finalPrice)} AED',
+                        loading: () => '...',
+                        error: (_, _) => contract.sourceQuotationId!,
+                      ),
+                ),
               _DetailRow(label: 'Template Version', value: 'v${contract.templateVersion}'),
               if (contract.status == ContractStatus.rejected && contract.rejection != null) ...[
                 const SizedBox(height: 12),

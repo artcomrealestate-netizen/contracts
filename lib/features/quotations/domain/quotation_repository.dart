@@ -8,6 +8,10 @@ abstract class QuotationRepository {
 
   Future<void> add(SavedQuotation quotation, {required String createdBy});
 
+  /// Single-quotation lookup — the `QuotationRepository.getQuotation` TDD §19
+  /// names for a contract's sourceQuotationId link to resolve.
+  Future<SavedQuotation?> getQuotation(String id);
+
   /// Used only by LocalQuotationMigrator to detect a quotaNumber collision
   /// (two devices that independently reached the same local number) before
   /// migrating a legacy local quotation into Firestore.

@@ -42,6 +42,14 @@ class FakeQuotationRepository implements QuotationRepository {
   }
 
   @override
+  Future<SavedQuotation?> getQuotation(String id) async {
+    for (final q in _quotations) {
+      if (q.id == id) return q;
+    }
+    return null;
+  }
+
+  @override
   Future<void> delete(String id) async {
     _quotations.removeWhere((q) => q.id == id);
     _controller.add(_newestFirst);

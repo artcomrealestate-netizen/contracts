@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../customers/presentation/customer_providers.dart';
 import '../../properties/presentation/property_providers.dart';
+import '../../quotations/presentation/quotation_providers.dart';
 import '../../templates/presentation/template_providers.dart';
 import '../domain/contract_clause.dart';
 import 'contract_providers.dart';
@@ -33,12 +34,12 @@ class CreateContractScreen extends ConsumerStatefulWidget {
 
 class _CreateContractScreenState extends ConsumerState<CreateContractScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _sourceQuotationController = TextEditingController();
 
   String? _customerId;
   String? _propertyId;
   String? _templateId;
   int? _templateVersion;
+  String? _sourceQuotationId;
   List<_ContractClauseDraft> _clauseDrafts = [];
   bool _loadingClauses = false;
 
@@ -47,7 +48,6 @@ class _CreateContractScreenState extends ConsumerState<CreateContractScreen> {
 
   @override
   void dispose() {
-    _sourceQuotationController.dispose();
     for (final draft in _clauseDrafts) {
       draft.contentController.dispose();
     }
@@ -132,8 +132,7 @@ class _CreateContractScreenState extends ConsumerState<CreateContractScreen> {
             templateVersion: _templateVersion!,
             clauses: clauses,
             createdBy: currentUser.id,
-            sourceQuotationId:
-                _sourceQuotationController.text.trim().isEmpty ? null : _sourceQuotationController.text.trim(),
+            sourceQuotationId: _sourceQuotationId,
           );
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
@@ -197,14 +196,27 @@ class _CreateContractScreenState extends ConsumerState<CreateContractScreen> {
               error: (error, _) => Text('Failed to load properties: $error'),
             ),
             const SizedBox(height: 12),
-            TextFormField(
-              key: const Key('sourceQuotationField'),
-              controller: _sourceQuotationController,
-              decoration: const InputDecoration(
-                labelText: 'Source Quotation Reference (optional)',
-                helperText: 'Free text for now — not yet linked to a live quotation record (TDD phase 7).',
-                helperMaxLines: 2,
-              ),
+            Consumer(
+              builder: (context, ref, _) {
+                final quotationsAsync = ref.watch(quotationsStreamProvider);
+                return quotationsAsync.when(
+                  data: (quotations) => DropdownButtonFormField<String?>(
+                    key: const Key('sourceQuotationDropdown'),
+                    initialValue: _sourceQuotationId,
+                    decoration: const InputDecoration(labelText: 'Source Quotation (optional)'),
+                    items: [
+                      const DropdownMenuItem<String?>(value: null, child: Text('None')),
+                      ...quotations.map((q) => DropdownMenuItem<String?>(
+                            value: q.id,
+                            child: Text('${q.quotaNumber} — ${q.customerName}'),
+                          )),
+                    ],
+                    onChanged: (value) => setState(() => _sourceQuotationId = value),
+                  ),
+                  loading: () => const LinearProgressIndicator(),
+                  error: (error, _) => Text('Failed to load quotations: $error'),
+                );
+              },
             ),
             const SizedBox(height: 12),
             templatesAsync.when(
