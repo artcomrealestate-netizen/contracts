@@ -1,12 +1,1 @@
-{
-  "hosting": {
-    "public": "build/web",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "rewrites": [
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ]
-  }
-}
+{"firestore":{"rules":"firestore.rules","indexes":"firestore.indexes.json"},"emulators":{"firestore":{"port":8080},"ui":{"enabled":false},"singleProjectMode":true},"hosting":{"public":"build/web","ignore":["firebase.json","**/.*","**/node_modules/**"],"rewrites":[{"source":"**","destination":"/index.html"}]},"flutter":{"platforms":{"android":{"default":{"projectId":"quocalc-504218","appId":"1:966128666735:android:9e6c0209b224f69271259a","fileOutput":"android/app/google-services.json"}},"dart":{"lib/core/config/firebase_options_dev.dart":{"projectId":"quocalc-dev","configurations":{"android":"1:229982416333:android:45206307794c333cbbe884","ios":"1:229982416333:ios:7b737d64c45218e7bbe884","web":"1:229982416333:web:ff5fdf54cc2f296ebbe884","windows":"1:229982416333:web:eedc31734c061939bbe884"}},"lib/core/config/firebase_options_staging.dart":{"projectId":"quocalc-staging","configurations":{"android":"1:823258124820:android:a8a5e99ebe22bcc0d64d01","ios":"1:823258124820:ios:acf868324aa4a7b8d64d01","web":"1:823258124820:web:2461674bbcc738a1d64d01","windows":"1:823258124820:web:8545ddc89162dbedd64d01"}},"lib/core/config/firebase_options_prod.dart":{"projectId":"quocalc-504218","configurations":{"android":"1:966128666735:android:9e6c0209b224f69271259a","ios":"1:966128666735:ios:4b2d9221fb4ba9ec71259a","web":"1:966128666735:web:ddd18bab83d27cd171259a","windows":"1:966128666735:web:1ab65cc4cb41aeba71259a"}}}}}}

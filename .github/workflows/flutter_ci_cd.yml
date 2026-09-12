@@ -13,6 +13,10 @@ env:
   # Required for correct Arabic PDF text shaping (see lib/pdf/quotation_pdf_builder.dart).
   # Without this, some PDF viewers render Arabic text with disconnected letters.
   ARABIC_DEFINE: '--dart-define=use_arabic=true'
+  # Selects which Firebase project the Contract System module talks to (see
+  # lib/core/config/environment.dart). Release builds must target production,
+  # not the `dev` default.
+  PROD_DEFINE: '--dart-define=APP_ENV=prod'
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -48,12 +52,50 @@ jobs:
           retention-days: 14
 
   # ---------------------------------------------------------------------------
+  # 1b) FIRESTORE RULES GATE — runs in parallel with `test`. Verifies
+  #     firestore.rules against the emulator (see firestore-tests/), not just
+  #     that the app compiles against it. A failing rules test blocks merge
+  #     the same way a failing Dart test does (see build_android/build_ios's
+  #     `needs: [test, firestore_rules_test]`).
+  # ---------------------------------------------------------------------------
+  firestore_rules_test:
+    name: Firestore Rules Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # The Firebase Emulator Suite requires JDK 21+ (firebase-tools no
+      # longer supports older runtimes); don't rely on the runner image's
+      # default JDK.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+
+      - name: Install Firestore rules test dependencies
+        working-directory: firestore-tests
+        run: npm install
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Run rules tests against the emulator
+        # Run from the repo root so the emulator picks up the top-level
+        # firebase.json/firestore.rules, while the test command itself
+        # executes inside firestore-tests/ where its package.json lives.
+        run: firebase emulators:exec --project=demo-qouta-calculator-ci --only firestore "npm --prefix firestore-tests test"
+
+  # ---------------------------------------------------------------------------
   # 2) ANDROID BUILD — only after tests pass, and only on pushes to main
   #    (not on pull_request builds, to avoid burning signing secrets on forks).
   # ---------------------------------------------------------------------------
   build_android:
     name: Build Android (APK + AAB)
-    needs: test
+    needs: [test, firestore_rules_test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
@@ -94,10 +136,10 @@ jobs:
           EOF
 
       - name: Build APK (per-ABI)
-        run: flutter build apk --release --split-per-abi ${{ env.ARABIC_DEFINE }}
+        run: flutter build apk --release --split-per-abi ${{ env.ARABIC_DEFINE }} ${{ env.PROD_DEFINE }}
 
       - name: Build App Bundle (Play Store)
-        run: flutter build appbundle --release ${{ env.ARABIC_DEFINE }}
+        run: flutter build appbundle --release ${{ env.ARABIC_DEFINE }} ${{ env.PROD_DEFINE }}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -119,7 +161,7 @@ jobs:
   # ---------------------------------------------------------------------------
   build_ios:
     name: Build iOS (IPA)
-    needs: test
+    needs: [test, firestore_rules_test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: macos-latest
     steps:
@@ -135,7 +177,7 @@ jobs:
         run: flutter pub get
 
       - name: Build unsigned iOS archive (compile check, no Apple account needed)
-        run: flutter build ipa --release --no-codesign ${{ env.ARABIC_DEFINE }}
+        run: flutter build ipa --release --no-codesign ${{ env.ARABIC_DEFINE }} ${{ env.PROD_DEFINE }}
 
       - name: Import signing certificate & provisioning profile
         if: ${{ env.APPLE_CERTIFICATE_BASE64 != '' }}

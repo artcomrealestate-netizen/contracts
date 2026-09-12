@@ -1,0 +1,75 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/errors/app_exception.dart';
+import '../domain/app_user.dart';
+import 'auth_providers.dart';
+
+/// Drives the auth-gated section of the app. Emits:
+/// - `AsyncData(null)`      -> signed out, show LoginScreen
+/// - `AsyncData(AppUser)`   -> signed in with an active profile
+/// - `AsyncError(AppException(permissionDenied), ...)` -> a Firebase Auth
+///   session existed but the Firestore profile was missing/suspended/disabled;
+///   the user has already been force-signed-out by the time this emits, so
+///   the UI should show the error and fall back to LoginScreen (TDD §6:
+///   account status is part of authorization, not just a UI flag).
+class AuthController extends AsyncNotifier<AppUser?> {
+  @override
+  Future<AppUser?> build() {
+    final authRepository = ref.watch(authRepositoryProvider);
+
+    // authStateChanges() is the source of truth; resolving the initial
+    // future from it also covers "already signed in on app start".
+    return authRepository.authStateChanges().first.then((identity) async {
+      if (identity == null) return null;
+      return _loadActiveProfile(identity.uid);
+    });
+  }
+
+  Future<AppUser?> _loadActiveProfile(String uid) async {
+    final userRepository = ref.read(userRepositoryProvider);
+    final authRepository = ref.read(authRepositoryProvider);
+    final profile = await userRepository.getUser(uid);
+    if (profile == null) {
+      await authRepository.signOut();
+      throw const AppException(
+        AppErrorCode.permissionDenied,
+        'No profile found for this account. Contact an administrator.',
+      );
+    }
+    if (!profile.isActive) {
+      await authRepository.signOut();
+      throw const AppException(
+        AppErrorCode.permissionDenied,
+        'This account is not active. Contact an administrator.',
+      );
+    }
+    return profile;
+  }
+
+  Future<void> signIn({required String email, required String password}) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      final authRepository = ref.read(authRepositoryProvider);
+      final identity = await authRepository.signIn(
+        email: email,
+        password: password,
+      );
+      return _loadActiveProfile(identity.uid);
+    });
+  }
+
+  Future<void> signOut() async {
+    final authRepository = ref.read(authRepositoryProvider);
+    await authRepository.signOut();
+    state = const AsyncData(null);
+  }
+
+  Future<void> sendPasswordResetEmail(String email) async {
+    final authRepository = ref.read(authRepositoryProvider);
+    await authRepository.sendPasswordResetEmail(email);
+  }
+}
+
+final authControllerProvider = AsyncNotifierProvider<AuthController, AppUser?>(
+  AuthController.new,
+);

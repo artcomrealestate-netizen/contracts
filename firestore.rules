@@ -1,0 +1,52 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function currentUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isActive() {
+      return isSignedIn()
+        && currentUserDoc().data.status == 'active';
+    }
+
+    function isAdmin() {
+      return isActive()
+        && currentUserDoc().data.role == 'admin';
+    }
+
+    function isOwnUserDoc(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Fields only an admin may set/change on a user document.
+    function adminOnlyFieldsUnchanged() {
+      return request.resource.data.role == resource.data.role
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.permissions == resource.data.permissions;
+    }
+
+    match /users/{userId} {
+      allow read: if isAdmin() || (isOwnUserDoc(userId) && isActive());
+
+      // Admins manage any user document.
+      allow write: if isAdmin();
+
+      // A user may update their own profile fields (e.g. displayName) but
+      // can never grant themselves a role, status, or permission.
+      allow update: if isOwnUserDoc(userId) && isActive() && adminOnlyFieldsUnchanged();
+    }
+
+    // Everything else is deferred to later phases (customers, properties,
+    // contracts, ...) and denied by default until those rules are added.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
