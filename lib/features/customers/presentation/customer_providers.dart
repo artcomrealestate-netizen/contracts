@@ -12,3 +12,9 @@ final customerRepositoryProvider = Provider<CustomerRepository>((ref) {
 final customersStreamProvider = StreamProvider<List<Customer>>((ref) {
   return ref.watch(customerRepositoryProvider).watchCustomers();
 });
+
+/// Single-customer lookup, e.g. to show a customer's name on a contract
+/// that only stores its `customerId`.
+final customerByIdProvider = FutureProvider.family<Customer?, String>((ref, id) {
+  return ref.watch(customerRepositoryProvider).getCustomer(id);
+});

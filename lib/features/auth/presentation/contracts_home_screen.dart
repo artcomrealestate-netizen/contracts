@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../contracts/presentation/contracts_list_screen.dart';
 import '../../customers/presentation/customers_list_screen.dart';
 import '../../properties/presentation/properties_list_screen.dart';
 import '../../templates/presentation/templates_list_screen.dart';
 import '../domain/permission.dart';
 import 'auth_controller.dart';
 
-/// Landing screen for the auth-gated Contract System module. Customers and
-/// Properties (TDD §13/§14) are the first real features on top of the auth
-/// foundation; the rest (templates, contracts, approvals, dashboard) are
-/// built in later phases per docs/Contract_System_TDD_v1.1_EN.md §68.
+/// Landing screen for the auth-gated Contract System module. Customers,
+/// Properties, Templates, and Contracts (Draft only — TDD §13/§14/§15-17)
+/// are the first real features on top of the auth foundation; approvals and
+/// the dashboard are built in later phases per
+/// docs/Contract_System_TDD_v1.1_EN.md §68.
 class ContractsHomeScreen extends ConsumerWidget {
   const ContractsHomeScreen({super.key});
 
@@ -76,11 +78,16 @@ class ContractsHomeScreen extends ConsumerWidget {
                       MaterialPageRoute(builder: (_) => const TemplatesListScreen()),
                     ),
                   ),
-                const ListTile(
-                  leading: Icon(Icons.description_outlined, color: Colors.grey),
-                  title: Text('Contracts', style: TextStyle(color: Colors.grey)),
-                  subtitle: Text('Coming in a later phase'),
-                ),
+                if (user?.hasPermission(Permission.contractRead) ?? false)
+                  ListTile(
+                    key: const Key('contractsMenuTile'),
+                    leading: const Icon(Icons.description_outlined),
+                    title: const Text('Contracts'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const ContractsListScreen()),
+                    ),
+                  ),
               ],
             ),
           ),

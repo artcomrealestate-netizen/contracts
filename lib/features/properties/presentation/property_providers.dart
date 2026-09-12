@@ -12,3 +12,9 @@ final propertyRepositoryProvider = Provider<PropertyRepository>((ref) {
 final propertiesStreamProvider = StreamProvider<List<Property>>((ref) {
   return ref.watch(propertyRepositoryProvider).watchProperties();
 });
+
+/// Single-property lookup, e.g. to show a property's name on a contract
+/// that only stores its `propertyId`.
+final propertyByIdProvider = FutureProvider.family<Property?, String>((ref, id) {
+  return ref.watch(propertyRepositoryProvider).getProperty(id);
+});

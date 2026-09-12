@@ -96,8 +96,41 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // Everything else is deferred to later phases (contracts, ...) and
-    // denied by default until those rules are added.
+    match /contracts/{contractId} {
+      allow read: if hasPermission('contract.read');
+      // Every contract is born a Draft with a fresh server-assigned number
+      // (TDD §39) — version pinned to 1, exactly like a template's v1.
+      allow create: if hasPermission('contract.create')
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.status == 'DRAFT'
+        && request.resource.data.version == 1;
+      // Only the creator may edit their own Draft, and only while it stays
+      // a Draft — Submit/Approve/Reject/Finalize (state transitions, and
+      // contract.edit_any for an admin editing someone else's) are the
+      // Approval Workflow phase's concern, not a plain edit.
+      allow update: if hasPermission('contract.edit_own')
+        && resource.data.createdBy == request.auth.uid
+        && resource.data.status == 'DRAFT'
+        && request.resource.data.status == 'DRAFT'
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.contractNumber == resource.data.contractNumber
+        && request.resource.data.version == resource.data.version;
+      allow delete: if false;
+    }
+
+    // Logical per-year counters backing contract numbering (TDD §39) — never
+    // read by the client, only advanced by exactly 1 inside the transaction
+    // in FirestoreContractRepository.createDraftContract.
+    match /counters/{counterId} {
+      allow read: if false;
+      allow create: if hasPermission('contract.create') && request.resource.data.count == 1;
+      allow update: if hasPermission('contract.create')
+        && request.resource.data.count == resource.data.count + 1;
+      allow delete: if false;
+    }
+
+    // Everything else is deferred to later phases (approval workflow,
+    // finalization, ...) and denied by default until those rules are added.
     match /{document=**} {
       allow read, write: if false;
     }
