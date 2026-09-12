@@ -38,7 +38,14 @@ class FirestoreNotificationRepository implements NotificationRepository {
 
   @override
   Stream<List<AppNotification>> watchBroadcastNotifications(String permission) {
+    // The rule's broadcast branch requires resource.data.userId == null as
+    // well as the audiencePermission match — for a list()/count() query
+    // (unlike a single get()), Firestore can only prove a rule's data
+    // comparisons hold for every possible result if the query itself pins
+    // that same field, so userId == null has to be an explicit filter here,
+    // not just true of every document this code happens to write.
     return _notifications
+        .where('userId', isEqualTo: null)
         .where('audiencePermission', isEqualTo: permission)
         .orderBy('createdAt', descending: true)
         .snapshots()
