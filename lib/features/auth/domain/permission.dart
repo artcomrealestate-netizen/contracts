@@ -7,10 +7,15 @@ class Permission {
   // Customer / property
   static const customerRead = 'customer.read';
   static const customerCreate = 'customer.create';
+  // Not in TDD §12's RBAC list — same gap as property.create below, added
+  // once editing an existing record (fixing a typo, updating contact info)
+  // turned out to be needed and there was no way to grant it.
+  static const customerUpdate = 'customer.update';
   static const propertyRead = 'property.read';
   // Not in TDD §12's RBAC list (only property.read is), but properties have
   // to be created by someone — added at the same level as customer.create.
   static const propertyCreate = 'property.create';
+  static const propertyUpdate = 'property.update';
 
   // Contract
   static const contractCreate = 'contract.create';
@@ -52,8 +57,10 @@ class Permission {
     final employeeDefaults = <String, bool>{
       customerRead: true,
       customerCreate: true,
+      customerUpdate: true,
       propertyRead: true,
       propertyCreate: true,
+      propertyUpdate: true,
       contractCreate: true,
       contractRead: true,
       contractEditOwn: true,

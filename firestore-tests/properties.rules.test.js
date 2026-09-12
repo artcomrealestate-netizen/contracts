@@ -11,6 +11,8 @@ const { doc, getDoc, setDoc, collection, addDoc, updateDoc, deleteDoc } = requir
 // customers rules: property.read gates reads, property.create gates writes
 // (property.create isn't in the TDD's §12 RBAC list, but properties have to
 // be created by someone — see lib/features/auth/domain/permission.dart).
+// property.update (also not in §12) is not creator-restricted, but createdBy
+// itself can never change on update.
 
 let testEnv;
 
@@ -38,7 +40,7 @@ beforeEach(async () => {
       email: 'access@example.com',
       role: 'employee',
       status: 'active',
-      permissions: { 'property.read': true, 'property.create': true },
+      permissions: { 'property.read': true, 'property.create': true, 'property.update': true },
     });
     await setDoc(doc(db, 'users', EMPLOYEE_NO_ACCESS), {
       email: 'noaccess@example.com',
@@ -119,9 +121,23 @@ describe('properties/{propertyId} rules', () => {
     );
   });
 
-  it('property documents cannot be updated or deleted in this phase', async () => {
+  it('a user with property.update can edit a property record, even one they did not create', async () => {
     const db = testEnv.authenticatedContext(EMPLOYEE_WITH_ACCESS).firestore();
+    await assertSucceeds(updateDoc(doc(db, 'properties', 'existing-property'), { name: 'Renamed' }));
+  });
+
+  it('a user without property.update cannot edit a property record', async () => {
+    const db = testEnv.authenticatedContext(EMPLOYEE_NO_ACCESS).firestore();
     await assertFails(updateDoc(doc(db, 'properties', 'existing-property'), { name: 'Renamed' }));
+  });
+
+  it('createdBy cannot change on update', async () => {
+    const db = testEnv.authenticatedContext(EMPLOYEE_WITH_ACCESS).firestore();
+    await assertFails(updateDoc(doc(db, 'properties', 'existing-property'), { createdBy: EMPLOYEE_NO_ACCESS }));
+  });
+
+  it('property documents can never be deleted', async () => {
+    const db = testEnv.authenticatedContext(EMPLOYEE_WITH_ACCESS).firestore();
     await assertFails(deleteDoc(doc(db, 'properties', 'existing-property')));
   });
 });

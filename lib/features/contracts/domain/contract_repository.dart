@@ -15,9 +15,15 @@ abstract class ContractRepository {
     String? sourceQuotationId,
   });
 
-  /// Saves edited clause content on a Draft the caller owns — content only;
-  /// customer/property/template/version stay fixed once created.
-  Future<void> updateDraftClauses(String id, List<ContractClause> clauses);
+  /// Saves edits to a Draft the caller owns: clause content always, and
+  /// optionally which customer/property this contract is for (template/
+  /// version stay fixed once created — see Contract's own doc comment).
+  Future<void> updateDraft(
+    String id,
+    List<ContractClause> clauses, {
+    String? customerId,
+    String? propertyId,
+  });
 
   /// DRAFT -> PENDING_APPROVAL (TDD §23 Submit).
   Future<void> submitContract(String id, {required String actorId});

@@ -182,9 +182,16 @@ class FirestoreContractRepository implements ContractRepository {
   }
 
   @override
-  Future<void> updateDraftClauses(String id, List<ContractClause> clauses) async {
+  Future<void> updateDraft(
+    String id,
+    List<ContractClause> clauses, {
+    String? customerId,
+    String? propertyId,
+  }) async {
     await _contracts.doc(id).update({
       'clauses': clauses.map(_clauseToMap).toList(),
+      if (customerId != null) 'customerId': customerId,
+      if (propertyId != null) 'propertyId': propertyId,
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }

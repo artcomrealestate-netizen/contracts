@@ -203,6 +203,36 @@ describe('contracts/{contractId} rules', () => {
     const db = testEnv.authenticatedContext(OWNER).firestore();
     await assertFails(deleteDoc(doc(db, 'contracts', 'existing-draft')));
   });
+
+  it('the owner can change which customer/property a Draft is for', async () => {
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(
+      updateDoc(doc(db, 'contracts', 'existing-draft'), { customerId: 'cust2', propertyId: 'prop2' })
+    );
+  });
+
+  it('customerId/propertyId cannot change while submitting for approval', async () => {
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      updateDoc(doc(db, 'contracts', 'existing-draft'), {
+        status: 'PENDING_APPROVAL',
+        submittedAt: new Date(),
+        customerId: 'cust2',
+      })
+    );
+  });
+
+  it('customerId/propertyId cannot change on approve, even by an admin', async () => {
+    const db = testEnv.authenticatedContext(ADMIN).firestore();
+    await assertFails(
+      updateDoc(doc(db, 'contracts', 'existing-pending'), {
+        status: 'APPROVED',
+        approvedAt: new Date(),
+        approvedBy: ADMIN,
+        customerId: 'cust2',
+      })
+    );
+  });
 });
 
 describe('contracts/{contractId} — submit (TDD §23)', () => {

@@ -5,11 +5,14 @@ const {
   assertSucceeds,
   assertFails,
 } = require('@firebase/rules-unit-testing');
-const { doc, getDoc, setDoc, collection, addDoc } = require('firebase/firestore');
+const { doc, getDoc, setDoc, collection, addDoc, updateDoc, deleteDoc } = require('firebase/firestore');
 
 // Mirrors docs/Contract_System_TDD_v1.1_EN.md §13/§40: customer.read gates
 // reads, customer.create gates writes, and a client can never write itself
-// in as the createdBy of someone else's customer record.
+// in as the createdBy of someone else's customer record. customer.update
+// (not in TDD §12 — see permission.dart) is not creator-restricted, since a
+// customer record is a shared company record, not personal to whoever first
+// entered it — but createdBy itself can never change on update.
 
 let testEnv;
 
@@ -37,7 +40,7 @@ beforeEach(async () => {
       email: 'access@example.com',
       role: 'employee',
       status: 'active',
-      permissions: { 'customer.read': true, 'customer.create': true },
+      permissions: { 'customer.read': true, 'customer.create': true, 'customer.update': true },
     });
     await setDoc(doc(db, 'users', EMPLOYEE_NO_ACCESS), {
       email: 'noaccess@example.com',
@@ -110,10 +113,23 @@ describe('customers/{customerId} rules', () => {
     );
   });
 
-  it('customer documents cannot be updated or deleted in this phase', async () => {
-    const { updateDoc, deleteDoc } = require('firebase/firestore');
+  it('a user with customer.update can edit a customer record, even one they did not create', async () => {
     const db = testEnv.authenticatedContext(EMPLOYEE_WITH_ACCESS).firestore();
+    await assertSucceeds(updateDoc(doc(db, 'customers', 'existing-customer'), { address: 'New address' }));
+  });
+
+  it('a user without customer.update cannot edit a customer record', async () => {
+    const db = testEnv.authenticatedContext(EMPLOYEE_NO_ACCESS).firestore();
     await assertFails(updateDoc(doc(db, 'customers', 'existing-customer'), { address: 'New address' }));
+  });
+
+  it('createdBy cannot change on update', async () => {
+    const db = testEnv.authenticatedContext(EMPLOYEE_WITH_ACCESS).firestore();
+    await assertFails(updateDoc(doc(db, 'customers', 'existing-customer'), { createdBy: EMPLOYEE_NO_ACCESS }));
+  });
+
+  it('customer documents can never be deleted', async () => {
+    const db = testEnv.authenticatedContext(EMPLOYEE_WITH_ACCESS).firestore();
     await assertFails(deleteDoc(doc(db, 'customers', 'existing-customer')));
   });
 });

@@ -53,16 +53,22 @@ service cloud.firestore {
       allow read: if hasPermission('customer.read');
       allow create: if hasPermission('customer.create')
         && request.resource.data.createdBy == request.auth.uid;
-      // Edit/delete come with a later phase (contract linkage, audit trail);
-      // customers are create+read only for now.
-      allow update, delete: if false;
+      // customer.update (not in TDD §12 — see permission.dart) may change
+      // every field except who created it; not creator-restricted, since a
+      // customer record is a shared company record, not personal to whoever
+      // first entered it.
+      allow update: if hasPermission('customer.update')
+        && request.resource.data.createdBy == resource.data.createdBy;
+      allow delete: if false;
     }
 
     match /properties/{propertyId} {
       allow read: if hasPermission('property.read');
       allow create: if hasPermission('property.create')
         && request.resource.data.createdBy == request.auth.uid;
-      allow update, delete: if false;
+      allow update: if hasPermission('property.update')
+        && request.resource.data.createdBy == resource.data.createdBy;
+      allow delete: if false;
     }
 
     match /contractTemplates/{templateId} {
@@ -112,22 +118,35 @@ service cloud.firestore {
         && request.resource.data.version == 1;
 
       // Fields that must never change across ANY update, whoever performs it.
-      function contractCoreFieldsUnchanged() {
+      // contractNumber/createdBy/version/templateId/templateVersion never
+      // change no matter which transition this is. customerId/propertyId
+      // are handled separately below — they're allowed to change, but only
+      // while the owner is editing their own Draft.
+      function immutableIdentityFieldsUnchanged() {
         return request.resource.data.contractNumber == resource.data.contractNumber
           && request.resource.data.createdBy == resource.data.createdBy
           && request.resource.data.version == resource.data.version
-          && request.resource.data.customerId == resource.data.customerId
-          && request.resource.data.propertyId == resource.data.propertyId
           && request.resource.data.templateId == resource.data.templateId
           && request.resource.data.templateVersion == resource.data.templateVersion;
       }
 
-      // Owner editing clause content (or sourceQuotationId) on their own Draft.
+      // Owner editing clause content, sourceQuotationId, customerId, or
+      // propertyId on their own Draft.
       function isOwnerEditingDraft() {
         return hasPermission('contract.edit_own')
           && resource.data.createdBy == request.auth.uid
           && resource.data.status == 'DRAFT'
           && request.resource.data.status == 'DRAFT';
+      }
+
+      // Every transition other than isOwnerEditingDraft() must leave
+      // customerId/propertyId exactly as they were — changing which
+      // customer/property a contract is for only makes sense while it's
+      // still an editable Draft.
+      function customerAndPropertyUnchangedUnlessEditingDraft() {
+        return isOwnerEditingDraft()
+          || (request.resource.data.customerId == resource.data.customerId
+              && request.resource.data.propertyId == resource.data.propertyId);
       }
 
       // Owner submitting their own Draft for approval (TDD §23 Submit).
@@ -173,7 +192,8 @@ service cloud.firestore {
           && request.resource.data.finalizedBy == request.auth.uid;
       }
 
-      allow update: if contractCoreFieldsUnchanged()
+      allow update: if immutableIdentityFieldsUnchanged()
+        && customerAndPropertyUnchangedUnlessEditingDraft()
         && (isOwnerEditingDraft()
             || isOwnerSubmitting()
             || isAdminApproving()

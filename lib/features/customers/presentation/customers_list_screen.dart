@@ -14,6 +14,7 @@ class CustomersListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authControllerProvider).value;
     final canCreate = user?.hasPermission(Permission.customerCreate) ?? false;
+    final canUpdate = user?.hasPermission(Permission.customerUpdate) ?? false;
     final customersAsync = ref.watch(customersStreamProvider);
 
     return Scaffold(
@@ -33,9 +34,23 @@ class CustomersListScreen extends ConsumerWidget {
                 key: Key('customerTile_${customer.id}'),
                 title: Text(customer.displayName),
                 subtitle: subtitle.isEmpty ? null : Text(subtitle),
-                trailing: Text(
-                  customer.customerType == CustomerType.individual ? 'Individual' : 'Company',
-                  style: Theme.of(context).textTheme.bodySmall,
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      customer.customerType == CustomerType.individual ? 'Individual' : 'Company',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    if (canUpdate)
+                      IconButton(
+                        key: Key('editCustomerButton_${customer.id}'),
+                        icon: const Icon(Icons.edit_outlined, size: 20),
+                        tooltip: 'Edit',
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => AddCustomerScreen(existingCustomer: customer)),
+                        ),
+                      ),
+                  ],
                 ),
               );
             },

@@ -33,27 +33,39 @@ class FirestorePropertyRepository implements PropertyRepository {
     );
   }
 
+  Map<String, dynamic> _editableFields(Property property) => {
+        'propertyCode': property.propertyCode,
+        'name': property.name,
+        'propertyType': property.propertyType,
+        'unitNumber': property.unitNumber,
+        'area': property.area,
+        'location': {
+          'emirate': property.location.emirate,
+          'city': property.location.city,
+          'district': property.location.district,
+        },
+        'status': property.status.name,
+      };
+
   @override
   Future<Property> createProperty(Property property) async {
     final docRef = _properties.doc();
     await docRef.set({
-      'propertyCode': property.propertyCode,
-      'name': property.name,
-      'propertyType': property.propertyType,
-      'unitNumber': property.unitNumber,
-      'area': property.area,
-      'location': {
-        'emirate': property.location.emirate,
-        'city': property.location.city,
-        'district': property.location.district,
-      },
-      'status': property.status.name,
+      ..._editableFields(property),
       'createdBy': property.createdBy,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
     final saved = await docRef.get();
     return _fromDoc(saved);
+  }
+
+  @override
+  Future<void> updateProperty(Property property) async {
+    await _properties.doc(property.id).update({
+      ..._editableFields(property),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   @override

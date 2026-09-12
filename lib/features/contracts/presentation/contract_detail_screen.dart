@@ -33,6 +33,8 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
   String? _editingForContractId;
   DateTime? _editingForUpdatedAt;
   final Map<String, TextEditingController> _clauseControllers = {};
+  String? _selectedCustomerId;
+  String? _selectedPropertyId;
 
   void _ensureEditingControllers(Contract contract) {
     if (_editingForContractId == contract.id && _editingForUpdatedAt == contract.updatedAt) return;
@@ -43,6 +45,8 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
     for (final clause in contract.clauses) {
       _clauseControllers[clause.id] = TextEditingController(text: clause.content);
     }
+    _selectedCustomerId = contract.customerId;
+    _selectedPropertyId = contract.propertyId;
     _editingForContractId = contract.id;
     _editingForUpdatedAt = contract.updatedAt;
   }
@@ -108,7 +112,12 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
               rejectionNote: c.rejectionNote,
             ))
         .toList();
-    await ref.read(contractRepositoryProvider).updateDraftClauses(contract.id, updated);
+    await ref.read(contractRepositoryProvider).updateDraft(
+          contract.id,
+          updated,
+          customerId: _selectedCustomerId != contract.customerId ? _selectedCustomerId : null,
+          propertyId: _selectedPropertyId != contract.propertyId ? _selectedPropertyId : null,
+        );
   }
 
   @override
@@ -178,22 +187,54 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
               Text(contract.contractNumber, style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 4),
               _DetailRow(label: 'Status', value: contractStatusToString(contract.status)),
-              _DetailRow(
-                label: 'Customer',
-                value: customerAsync.when(
-                  data: (c) => c?.displayName ?? contract.customerId,
-                  loading: () => '...',
-                  error: (_, _) => contract.customerId,
+              if (canEditDraft) ...[
+                const SizedBox(height: 8),
+                ref.watch(customersStreamProvider).when(
+                      data: (customers) => DropdownButtonFormField<String>(
+                        key: const Key('contractDetailCustomerDropdown'),
+                        initialValue: _selectedCustomerId,
+                        decoration: const InputDecoration(labelText: 'Customer'),
+                        items: customers
+                            .map((c) => DropdownMenuItem(value: c.id, child: Text(c.displayName)))
+                            .toList(),
+                        onChanged: (value) => setState(() => _selectedCustomerId = value),
+                        validator: (value) => value == null ? 'Required' : null,
+                      ),
+                      loading: () => const LinearProgressIndicator(),
+                      error: (error, _) => Text('Failed to load customers: $error'),
+                    ),
+                const SizedBox(height: 8),
+                ref.watch(propertiesStreamProvider).when(
+                      data: (properties) => DropdownButtonFormField<String>(
+                        key: const Key('contractDetailPropertyDropdown'),
+                        initialValue: _selectedPropertyId,
+                        decoration: const InputDecoration(labelText: 'Property'),
+                        items:
+                            properties.map((p) => DropdownMenuItem(value: p.id, child: Text(p.name))).toList(),
+                        onChanged: (value) => setState(() => _selectedPropertyId = value),
+                        validator: (value) => value == null ? 'Required' : null,
+                      ),
+                      loading: () => const LinearProgressIndicator(),
+                      error: (error, _) => Text('Failed to load properties: $error'),
+                    ),
+              ] else ...[
+                _DetailRow(
+                  label: 'Customer',
+                  value: customerAsync.when(
+                    data: (c) => c?.displayName ?? contract.customerId,
+                    loading: () => '...',
+                    error: (_, _) => contract.customerId,
+                  ),
                 ),
-              ),
-              _DetailRow(
-                label: 'Property',
-                value: propertyAsync.when(
-                  data: (p) => p?.name ?? contract.propertyId,
-                  loading: () => '...',
-                  error: (_, _) => contract.propertyId,
+                _DetailRow(
+                  label: 'Property',
+                  value: propertyAsync.when(
+                    data: (p) => p?.name ?? contract.propertyId,
+                    loading: () => '...',
+                    error: (_, _) => contract.propertyId,
+                  ),
                 ),
-              ),
+              ],
               if (contract.sourceQuotationId != null && contract.sourceQuotationId!.isNotEmpty)
                 _DetailRow(
                   label: 'Source Quotation',

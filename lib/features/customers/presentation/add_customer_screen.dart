@@ -6,7 +6,10 @@ import '../domain/customer.dart';
 import 'customer_providers.dart';
 
 class AddCustomerScreen extends ConsumerStatefulWidget {
-  const AddCustomerScreen({super.key});
+  /// When set, the form edits this customer instead of creating a new one.
+  final Customer? existingCustomer;
+
+  const AddCustomerScreen({super.key, this.existingCustomer});
 
   @override
   ConsumerState<AddCustomerScreen> createState() => _AddCustomerScreenState();
@@ -14,19 +17,38 @@ class AddCustomerScreen extends ConsumerStatefulWidget {
 
 class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
   final _formKey = GlobalKey<FormState>();
-  CustomerType _type = CustomerType.individual;
+  late CustomerType _type;
 
-  final _nameController = TextEditingController();
-  final _emiratesIdController = TextEditingController();
-  final _passportController = TextEditingController();
-  final _tradeLicenseController = TextEditingController();
-  final _licensingAuthorityController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _addressController = TextEditingController();
+  late final TextEditingController _nameController;
+  late final TextEditingController _emiratesIdController;
+  late final TextEditingController _passportController;
+  late final TextEditingController _tradeLicenseController;
+  late final TextEditingController _licensingAuthorityController;
+  late final TextEditingController _phoneController;
+  late final TextEditingController _emailController;
+  late final TextEditingController _addressController;
 
   bool _submitting = false;
   String? _errorMessage;
+
+  bool get _isEditing => widget.existingCustomer != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.existingCustomer;
+    _type = existing?.customerType ?? CustomerType.individual;
+    _nameController = TextEditingController(
+      text: existing == null ? '' : (existing.individual?.fullName ?? existing.company?.legalName ?? ''),
+    );
+    _emiratesIdController = TextEditingController(text: existing?.individual?.emiratesId ?? '');
+    _passportController = TextEditingController(text: existing?.individual?.passportNumber ?? '');
+    _tradeLicenseController = TextEditingController(text: existing?.company?.tradeLicenseNumber ?? '');
+    _licensingAuthorityController = TextEditingController(text: existing?.company?.licensingAuthority ?? '');
+    _phoneController = TextEditingController(text: existing?.contact.phone ?? '');
+    _emailController = TextEditingController(text: existing?.contact.email ?? '');
+    _addressController = TextEditingController(text: existing?.address ?? '');
+  }
 
   @override
   void dispose() {
@@ -53,8 +75,9 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
       _errorMessage = null;
     });
     try {
+      final existing = widget.existingCustomer;
       final customer = Customer(
-        id: '',
+        id: existing?.id ?? '',
         customerType: _type,
         individual: _type == CustomerType.individual
             ? IndividualDetails(
@@ -75,10 +98,14 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
           email: _emptyToNull(_emailController.text),
         ),
         address: _emptyToNull(_addressController.text),
-        status: CustomerStatus.active,
-        createdBy: currentUser.id,
+        status: existing?.status ?? CustomerStatus.active,
+        createdBy: existing?.createdBy ?? currentUser.id,
       );
-      await ref.read(customerRepositoryProvider).createCustomer(customer);
+      if (_isEditing) {
+        await ref.read(customerRepositoryProvider).updateCustomer(customer);
+      } else {
+        await ref.read(customerRepositoryProvider).createCustomer(customer);
+      }
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) setState(() => _errorMessage = e.toString());
@@ -90,7 +117,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Add Customer')),
+      appBar: AppBar(title: Text(_isEditing ? 'Edit Customer' : 'Add Customer')),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -183,7 +210,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
                       width: 18,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('Save Customer'),
+                  : Text(_isEditing ? 'Save Changes' : 'Save Customer'),
             ),
           ],
         ),

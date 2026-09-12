@@ -13,6 +13,7 @@ class PropertiesListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authControllerProvider).value;
     final canCreate = user?.hasPermission(Permission.propertyCreate) ?? false;
+    final canUpdate = user?.hasPermission(Permission.propertyUpdate) ?? false;
     final propertiesAsync = ref.watch(propertiesStreamProvider);
 
     return Scaffold(
@@ -35,9 +36,23 @@ class PropertiesListScreen extends ConsumerWidget {
                 key: Key('propertyTile_${property.id}'),
                 title: Text(property.name),
                 subtitle: Text(subtitleParts),
-                trailing: Text(
-                  property.propertyCode,
-                  style: Theme.of(context).textTheme.bodySmall,
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      property.propertyCode,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    if (canUpdate)
+                      IconButton(
+                        key: Key('editPropertyButton_${property.id}'),
+                        icon: const Icon(Icons.edit_outlined, size: 20),
+                        tooltip: 'Edit',
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => AddPropertyScreen(existingProperty: property)),
+                        ),
+                      ),
+                  ],
                 ),
               );
             },

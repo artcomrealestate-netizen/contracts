@@ -6,7 +6,10 @@ import '../domain/property.dart';
 import 'property_providers.dart';
 
 class AddPropertyScreen extends ConsumerStatefulWidget {
-  const AddPropertyScreen({super.key});
+  /// When set, the form edits this property instead of creating a new one.
+  final Property? existingProperty;
+
+  const AddPropertyScreen({super.key, this.existingProperty});
 
   @override
   ConsumerState<AddPropertyScreen> createState() => _AddPropertyScreenState();
@@ -15,17 +18,33 @@ class AddPropertyScreen extends ConsumerStatefulWidget {
 class _AddPropertyScreenState extends ConsumerState<AddPropertyScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  final _propertyCodeController = TextEditingController();
-  final _nameController = TextEditingController();
-  final _propertyTypeController = TextEditingController();
-  final _unitNumberController = TextEditingController();
-  final _areaController = TextEditingController();
-  final _emirateController = TextEditingController();
-  final _cityController = TextEditingController();
-  final _districtController = TextEditingController();
+  late final TextEditingController _propertyCodeController;
+  late final TextEditingController _nameController;
+  late final TextEditingController _propertyTypeController;
+  late final TextEditingController _unitNumberController;
+  late final TextEditingController _areaController;
+  late final TextEditingController _emirateController;
+  late final TextEditingController _cityController;
+  late final TextEditingController _districtController;
 
   bool _submitting = false;
   String? _errorMessage;
+
+  bool get _isEditing => widget.existingProperty != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.existingProperty;
+    _propertyCodeController = TextEditingController(text: existing?.propertyCode ?? '');
+    _nameController = TextEditingController(text: existing?.name ?? '');
+    _propertyTypeController = TextEditingController(text: existing?.propertyType ?? '');
+    _unitNumberController = TextEditingController(text: existing?.unitNumber ?? '');
+    _areaController = TextEditingController(text: existing == null ? '' : existing.area.toString());
+    _emirateController = TextEditingController(text: existing?.location.emirate ?? '');
+    _cityController = TextEditingController(text: existing?.location.city ?? '');
+    _districtController = TextEditingController(text: existing?.location.district ?? '');
+  }
 
   @override
   void dispose() {
@@ -52,8 +71,9 @@ class _AddPropertyScreenState extends ConsumerState<AddPropertyScreen> {
       _errorMessage = null;
     });
     try {
+      final existing = widget.existingProperty;
       final property = Property(
-        id: '',
+        id: existing?.id ?? '',
         propertyCode: _propertyCodeController.text.trim(),
         name: _nameController.text.trim(),
         propertyType: _propertyTypeController.text.trim(),
@@ -64,10 +84,14 @@ class _AddPropertyScreenState extends ConsumerState<AddPropertyScreen> {
           city: _emptyToNull(_cityController.text),
           district: _emptyToNull(_districtController.text),
         ),
-        status: PropertyStatus.active,
-        createdBy: currentUser.id,
+        status: existing?.status ?? PropertyStatus.active,
+        createdBy: existing?.createdBy ?? currentUser.id,
       );
-      await ref.read(propertyRepositoryProvider).createProperty(property);
+      if (_isEditing) {
+        await ref.read(propertyRepositoryProvider).updateProperty(property);
+      } else {
+        await ref.read(propertyRepositoryProvider).createProperty(property);
+      }
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) setState(() => _errorMessage = e.toString());
@@ -79,7 +103,7 @@ class _AddPropertyScreenState extends ConsumerState<AddPropertyScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Add Property')),
+      appBar: AppBar(title: Text(_isEditing ? 'Edit Property' : 'Add Property')),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -159,7 +183,7 @@ class _AddPropertyScreenState extends ConsumerState<AddPropertyScreen> {
                       width: 18,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('Save Property'),
+                  : Text(_isEditing ? 'Save Changes' : 'Save Property'),
             ),
           ],
         ),

@@ -45,34 +45,46 @@ class FirestoreCustomerRepository implements CustomerRepository {
     );
   }
 
+  Map<String, dynamic> _editableFields(Customer customer) => {
+        'customerType': customer.customerType.name,
+        'individual': customer.individual == null
+            ? null
+            : {
+                'fullName': customer.individual!.fullName,
+                'emiratesId': customer.individual!.emiratesId,
+                'passportNumber': customer.individual!.passportNumber,
+              },
+        'company': customer.company == null
+            ? null
+            : {
+                'legalName': customer.company!.legalName,
+                'tradeLicenseNumber': customer.company!.tradeLicenseNumber,
+                'licensingAuthority': customer.company!.licensingAuthority,
+              },
+        'contact': {'phone': customer.contact.phone, 'email': customer.contact.email},
+        'address': customer.address,
+        'status': customer.status.name,
+      };
+
   @override
   Future<Customer> createCustomer(Customer customer) async {
     final docRef = _customers.doc();
     await docRef.set({
-      'customerType': customer.customerType.name,
-      'individual': customer.individual == null
-          ? null
-          : {
-              'fullName': customer.individual!.fullName,
-              'emiratesId': customer.individual!.emiratesId,
-              'passportNumber': customer.individual!.passportNumber,
-            },
-      'company': customer.company == null
-          ? null
-          : {
-              'legalName': customer.company!.legalName,
-              'tradeLicenseNumber': customer.company!.tradeLicenseNumber,
-              'licensingAuthority': customer.company!.licensingAuthority,
-            },
-      'contact': {'phone': customer.contact.phone, 'email': customer.contact.email},
-      'address': customer.address,
-      'status': customer.status.name,
+      ..._editableFields(customer),
       'createdBy': customer.createdBy,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
     final saved = await docRef.get();
     return _fromDoc(saved);
+  }
+
+  @override
+  Future<void> updateCustomer(Customer customer) async {
+    await _customers.doc(customer.id).update({
+      ..._editableFields(customer),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   @override
