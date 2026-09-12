@@ -28,8 +28,8 @@ Firestore document before it can be used at all.
      "role": "admin",
      "status": "active",
      "permissions": {
-       "customer.read": true, "customer.create": true,
-       "property.read": true, "property.create": true,
+       "customer.read": true, "customer.create": true, "customer.update": true,
+       "property.read": true, "property.create": true, "property.update": true,
        "contract.create": true, "contract.read": true, "contract.edit_own": true,
        "contract.submit": true, "contract.clone": true, "document.upload": true,
        "document.read": true, "notification.read": true,
@@ -45,9 +45,17 @@ Firestore document before it can be used at all.
 
    This mirrors `Permission.defaultsFor(true)` in
    `lib/features/auth/domain/permission.dart` — if that list changes, update
-   this doc too. Note `property.create` and `template.read` aren't in the
-   TDD's own §12 RBAC list — see the comments next to those constants for why
-   they're granted anyway.
+   this doc too. Note `property.create`, `template.read`, `customer.update`,
+   and `property.update` aren't in the TDD's own §12 RBAC list — see the
+   comments next to those constants for why they're granted anyway.
+
+   There's no in-app way to grant a permission to an *existing* user either —
+   if a new permission key is added after an account was already created
+   (like `customer.update`/`property.update` were), that account's
+   `users/{uid}` document in the Firestore Console needs the new key added to
+   its `permissions` map by hand, the same way. The corresponding UI (edit
+   button, etc.) simply won't appear for that account until then — it isn't a
+   bug, just this doc's list being the only source of truth pre-user-management-UI.
 
 4. Run the app (`flutter run`, defaults to the `dev` Firebase project — see
    `lib/core/config/environment.dart`) and sign in with that email/password

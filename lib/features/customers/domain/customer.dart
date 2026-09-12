@@ -78,4 +78,17 @@ class Customer {
         CustomerType.individual => individual?.fullName ?? '',
         CustomerType.company => company?.legalName ?? '',
       };
+
+  Customer copyWith({CustomerStatus? status}) => Customer(
+        id: id,
+        customerType: customerType,
+        individual: individual,
+        company: company,
+        contact: contact,
+        address: address,
+        status: status ?? this.status,
+        createdBy: createdBy,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+      );
 }

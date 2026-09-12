@@ -30,10 +30,17 @@ class CustomersListScreen extends ConsumerWidget {
             itemBuilder: (context, index) {
               final customer = customers[index];
               final subtitle = customer.contact.phone ?? customer.contact.email ?? '';
+              final isInactive = customer.status == CustomerStatus.inactive;
               return ListTile(
                 key: Key('customerTile_${customer.id}'),
-                title: Text(customer.displayName),
-                subtitle: subtitle.isEmpty ? null : Text(subtitle),
+                title: Text(
+                  customer.displayName,
+                  style: isInactive ? const TextStyle(decoration: TextDecoration.lineThrough) : null,
+                ),
+                subtitle: Text([
+                  if (subtitle.isNotEmpty) subtitle,
+                  if (isInactive) 'Inactive',
+                ].join(' • ')),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -49,6 +56,17 @@ class CustomersListScreen extends ConsumerWidget {
                         onPressed: () => Navigator.of(context).push(
                           MaterialPageRoute(builder: (_) => AddCustomerScreen(existingCustomer: customer)),
                         ),
+                      ),
+                    if (canUpdate)
+                      IconButton(
+                        key: Key('toggleCustomerStatusButton_${customer.id}'),
+                        icon: Icon(isInactive ? Icons.unarchive_outlined : Icons.archive_outlined, size: 20),
+                        tooltip: isInactive ? 'Reactivate' : 'Deactivate',
+                        onPressed: () => ref.read(customerRepositoryProvider).updateCustomer(
+                              customer.copyWith(
+                                status: isInactive ? CustomerStatus.active : CustomerStatus.inactive,
+                              ),
+                            ),
                       ),
                   ],
                 ),

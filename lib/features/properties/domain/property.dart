@@ -42,4 +42,18 @@ class Property {
     this.createdAt,
     this.updatedAt,
   });
+
+  Property copyWith({PropertyStatus? status}) => Property(
+        id: id,
+        propertyCode: propertyCode,
+        name: name,
+        propertyType: propertyType,
+        unitNumber: unitNumber,
+        area: area,
+        location: location,
+        status: status ?? this.status,
+        createdBy: createdBy,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+      );
 }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/domain/permission.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../domain/property.dart';
 import 'add_property_screen.dart';
 import 'property_providers.dart';
 
@@ -28,13 +29,18 @@ class PropertiesListScreen extends ConsumerWidget {
             separatorBuilder: (_, _) => const Divider(height: 1),
             itemBuilder: (context, index) {
               final property = properties[index];
+              final isInactive = property.status == PropertyStatus.inactive;
               final subtitleParts = [
                 if (property.unitNumber != null) 'Unit ${property.unitNumber}',
                 property.propertyType,
+                if (isInactive) 'Inactive',
               ].where((s) => s.isNotEmpty).join(' • ');
               return ListTile(
                 key: Key('propertyTile_${property.id}'),
-                title: Text(property.name),
+                title: Text(
+                  property.name,
+                  style: isInactive ? const TextStyle(decoration: TextDecoration.lineThrough) : null,
+                ),
                 subtitle: Text(subtitleParts),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -51,6 +57,17 @@ class PropertiesListScreen extends ConsumerWidget {
                         onPressed: () => Navigator.of(context).push(
                           MaterialPageRoute(builder: (_) => AddPropertyScreen(existingProperty: property)),
                         ),
+                      ),
+                    if (canUpdate)
+                      IconButton(
+                        key: Key('togglePropertyStatusButton_${property.id}'),
+                        icon: Icon(isInactive ? Icons.unarchive_outlined : Icons.archive_outlined, size: 20),
+                        tooltip: isInactive ? 'Reactivate' : 'Deactivate',
+                        onPressed: () => ref.read(propertyRepositoryProvider).updateProperty(
+                              property.copyWith(
+                                status: isInactive ? PropertyStatus.active : PropertyStatus.inactive,
+                              ),
+                            ),
                       ),
                   ],
                 ),
