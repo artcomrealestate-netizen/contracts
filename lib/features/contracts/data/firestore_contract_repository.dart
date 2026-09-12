@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../domain/contract.dart';
 import '../domain/contract_clause.dart';
 import '../domain/contract_repository.dart';
+import '../domain/rejection.dart';
 
 class FirestoreContractRepository implements ContractRepository {
   final FirebaseFirestore _firestore;
@@ -11,6 +12,9 @@ class FirestoreContractRepository implements ContractRepository {
 
   CollectionReference<Map<String, dynamic>> get _contracts =>
       _firestore.collection('contracts');
+
+  CollectionReference<Map<String, dynamic>> get _auditLogs =>
+      _firestore.collection('auditLogs');
 
   Map<String, dynamic> _clauseToMap(ContractClause clause) => {
         'id': clause.id,
@@ -32,6 +36,22 @@ class FirestoreContractRepository implements ContractRepository {
         rejectionNote: map['rejectionNote'] as String?,
       );
 
+  Rejection? _rejectionFromMap(Map<String, dynamic>? map) {
+    if (map == null) return null;
+    return Rejection(
+      generalNote: map['generalNote'] as String? ?? '',
+      rejectedBy: map['rejectedBy'] as String? ?? '',
+      rejectedAt: (map['rejectedAt'] as Timestamp?)?.toDate(),
+      clauses: (map['clauses'] as List<dynamic>? ?? [])
+          .map((c) => (c as Map).cast<String, dynamic>())
+          .map((c) => ClauseRejectionNote(
+                clauseId: c['clauseId'] as String? ?? '',
+                note: c['note'] as String? ?? '',
+              ))
+          .toList(),
+    );
+  }
+
   Contract _fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data()!;
     final clauses = (data['clauses'] as List<dynamic>? ?? [])
@@ -52,7 +72,31 @@ class FirestoreContractRepository implements ContractRepository {
       createdBy: data['createdBy'] as String? ?? '',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+      submittedAt: (data['submittedAt'] as Timestamp?)?.toDate(),
+      approvedAt: (data['approvedAt'] as Timestamp?)?.toDate(),
+      approvedBy: data['approvedBy'] as String?,
+      rejection: _rejectionFromMap((data['rejection'] as Map?)?.cast<String, dynamic>()),
     );
+  }
+
+  void _addAuditLog(
+    Transaction transaction, {
+    required String contractId,
+    required String action,
+    required String actorId,
+    required String fromStatus,
+    required String toStatus,
+  }) {
+    transaction.set(_auditLogs.doc(), {
+      'entityType': 'contract',
+      'entityId': contractId,
+      'action': action,
+      'actorId': actorId,
+      'fromStatus': fromStatus,
+      'toStatus': toStatus,
+      'metadata': {},
+      'timestamp': FieldValue.serverTimestamp(),
+    });
   }
 
   @override
@@ -98,9 +142,18 @@ class FirestoreContractRepository implements ContractRepository {
         'finalizedAt': null,
         'approvedBy': null,
         'finalizedBy': null,
+        'rejection': null,
         'finalPdfUrl': null,
         'fileHash': null,
       });
+      _addAuditLog(
+        transaction,
+        contractId: contractRef.id,
+        action: 'CREATED',
+        actorId: createdBy,
+        fromStatus: 'NONE',
+        toStatus: 'DRAFT',
+      );
 
       // Firestore transactions don't support reading back a document just
       // written within the same transaction, so the returned Contract is
@@ -122,10 +175,139 @@ class FirestoreContractRepository implements ContractRepository {
   }
 
   @override
+  Future<void> updateDraftClauses(String id, List<ContractClause> clauses) async {
+    await _contracts.doc(id).update({
+      'clauses': clauses.map(_clauseToMap).toList(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  @override
+  Future<void> submitContract(String id, {required String actorId}) async {
+    final contractRef = _contracts.doc(id);
+    await _firestore.runTransaction((transaction) async {
+      transaction.update(contractRef, {
+        'status': contractStatusToString(ContractStatus.pendingApproval),
+        'submittedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      _addAuditLog(
+        transaction,
+        contractId: id,
+        action: 'SUBMITTED',
+        actorId: actorId,
+        fromStatus: 'DRAFT',
+        toStatus: 'PENDING_APPROVAL',
+      );
+    });
+  }
+
+  @override
+  Future<void> approveContract(String id, {required String actorId}) async {
+    final contractRef = _contracts.doc(id);
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(contractRef);
+      final rawClauses = (snapshot.data()?['clauses'] as List<dynamic>? ?? [])
+          .map((c) => (c as Map).cast<String, dynamic>())
+          .map((c) => {...c, 'reviewStatus': 'APPROVED', 'rejectionNote': null})
+          .toList();
+
+      transaction.update(contractRef, {
+        'status': contractStatusToString(ContractStatus.approved),
+        'approvedAt': FieldValue.serverTimestamp(),
+        'approvedBy': actorId,
+        'clauses': rawClauses,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      _addAuditLog(
+        transaction,
+        contractId: id,
+        action: 'APPROVED',
+        actorId: actorId,
+        fromStatus: 'PENDING_APPROVAL',
+        toStatus: 'APPROVED',
+      );
+    });
+  }
+
+  @override
+  Future<void> rejectContract(
+    String id, {
+    required String actorId,
+    required String generalNote,
+    required List<ClauseRejectionNote> clauseNotes,
+  }) async {
+    final contractRef = _contracts.doc(id);
+    final noteByClauseId = {for (final n in clauseNotes) n.clauseId: n.note};
+
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(contractRef);
+      final rawClauses = (snapshot.data()?['clauses'] as List<dynamic>? ?? [])
+          .map((c) => (c as Map).cast<String, dynamic>())
+          .map((c) {
+            final note = noteByClauseId[c['id'] as String?];
+            return {
+              ...c,
+              'reviewStatus': note != null ? 'NEEDS_REVISION' : 'APPROVED',
+              'rejectionNote': note,
+            };
+          })
+          .toList();
+
+      transaction.update(contractRef, {
+        'status': contractStatusToString(ContractStatus.rejected),
+        'rejection': {
+          'generalNote': generalNote,
+          'rejectedBy': actorId,
+          'rejectedAt': FieldValue.serverTimestamp(),
+          'clauses': clauseNotes.map((n) => {'clauseId': n.clauseId, 'note': n.note}).toList(),
+        },
+        'clauses': rawClauses,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      _addAuditLog(
+        transaction,
+        contractId: id,
+        action: 'REJECTED',
+        actorId: actorId,
+        fromStatus: 'PENDING_APPROVAL',
+        toStatus: 'REJECTED',
+      );
+    });
+  }
+
+  @override
+  Future<void> reviseRejectedContract(String id, {required String actorId}) async {
+    final contractRef = _contracts.doc(id);
+    await _firestore.runTransaction((transaction) async {
+      transaction.update(contractRef, {
+        'status': contractStatusToString(ContractStatus.draft),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      // Not one of TDD §31's listed action names (SUBMITTED/REJECTED/...) —
+      // added for this specific REJECTED -> DRAFT transition so it's still
+      // traceable in the audit log, not folded into a vaguer "UPDATED".
+      _addAuditLog(
+        transaction,
+        contractId: id,
+        action: 'REVISED',
+        actorId: actorId,
+        fromStatus: 'REJECTED',
+        toStatus: 'DRAFT',
+      );
+    });
+  }
+
+  @override
   Future<Contract?> getContract(String id) async {
     final doc = await _contracts.doc(id).get();
     if (!doc.exists) return null;
     return _fromDoc(doc);
+  }
+
+  @override
+  Stream<Contract?> watchContract(String id) {
+    return _contracts.doc(id).snapshots().map((doc) => doc.exists ? _fromDoc(doc) : null);
   }
 
   @override

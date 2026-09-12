@@ -12,3 +12,7 @@ final contractRepositoryProvider = Provider<ContractRepository>((ref) {
 final contractsStreamProvider = StreamProvider<List<Contract>>((ref) {
   return ref.watch(contractRepositoryProvider).watchContracts();
 });
+
+final contractByIdProvider = StreamProvider.family<Contract?, String>((ref, id) {
+  return ref.watch(contractRepositoryProvider).watchContract(id);
+});

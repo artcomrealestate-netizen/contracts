@@ -35,7 +35,7 @@ class ContractsListScreen extends ConsumerWidget {
                 subtitle: Text(contractStatusToString(contract.status)),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => ContractDetailScreen(contract: contract)),
+                  MaterialPageRoute(builder: (_) => ContractDetailScreen(contractId: contract.id)),
                 ),
               );
             },

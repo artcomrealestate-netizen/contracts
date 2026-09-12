@@ -1,9 +1,11 @@
 import 'contract_clause.dart';
+import 'rejection.dart';
 
-/// The full state machine from TDD §22. Only [draft] is reachable through
-/// this phase's UI (Implementation Order §68 phase 5, "Contracts / Draft");
-/// the rest exist here so [contractStatusFromString] never has to guess at
-/// a status written by a later phase (approval workflow, finalization, ...).
+/// The full state machine from TDD §22. Draft, Pending Approval, Rejected,
+/// and Approved are reachable through the UI as of the Approval Workflow
+/// phase (Implementation Order §68 phase 6); Finalized/Archived/Cancelled
+/// exist here so [contractStatusFromString] never has to guess at a status
+/// written by a later phase (finalization, archival, ...).
 enum ContractStatus { draft, pendingApproval, rejected, approved, finalized, archived, cancelled }
 
 ContractStatus contractStatusFromString(String value) {
@@ -46,10 +48,10 @@ String contractStatusToString(ContractStatus status) {
 }
 
 /// Mirrors the `contracts/{contractId}` document (TDD §17). Fields that only
-/// matter from the approval/finalization phases on (submittedAt,
-/// approvedBy, finalPdfUrl, snapshots, ...) aren't modeled here yet — they
-/// stay null on every document this phase writes, and get added to this
-/// class when the phase that reads them lands.
+/// matter from finalization on (finalizedAt, finalizedBy, finalPdfUrl,
+/// fileHash, snapshots, ...) aren't modeled here yet — they stay null on
+/// every document this phase writes, and get added to this class when
+/// Finalization/PDF (Implementation Order phase 8) lands.
 class Contract {
   final String id;
   final String contractNumber;
@@ -64,6 +66,10 @@ class Contract {
   final String createdBy;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final DateTime? submittedAt;
+  final DateTime? approvedAt;
+  final String? approvedBy;
+  final Rejection? rejection;
 
   const Contract({
     required this.id,
@@ -79,5 +85,9 @@ class Contract {
     this.sourceQuotationId,
     this.createdAt,
     this.updatedAt,
+    this.submittedAt,
+    this.approvedAt,
+    this.approvedBy,
+    this.rejection,
   });
 }

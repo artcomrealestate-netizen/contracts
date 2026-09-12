@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qouta_calculator/features/contracts/domain/contract.dart';
 import 'package:qouta_calculator/features/contracts/domain/contract_clause.dart';
+import 'package:qouta_calculator/features/contracts/domain/rejection.dart';
 
 void main() {
   group('contractStatusFromString / contractStatusToString', () {
@@ -49,6 +50,29 @@ void main() {
       );
       expect(contract.status, ContractStatus.draft);
       expect(contract.sourceQuotationId, isNull);
+      expect(contract.rejection, isNull);
+    });
+
+    test('stores rejection feedback once REJECTED (TDD §24)', () {
+      const contract = Contract(
+        id: 'c1',
+        contractNumber: 'CTR-2026-000001',
+        status: ContractStatus.rejected,
+        version: 1,
+        customerId: 'cust1',
+        propertyId: 'prop1',
+        templateId: 'tmpl1',
+        templateVersion: 1,
+        clauses: [],
+        createdBy: 'u1',
+        rejection: Rejection(
+          generalNote: 'Please revise payment terms.',
+          rejectedBy: 'admin1',
+          clauses: [ClauseRejectionNote(clauseId: 'clause-4', note: 'Revise the termination condition.')],
+        ),
+      );
+      expect(contract.rejection!.generalNote, 'Please revise payment terms.');
+      expect(contract.rejection!.clauses.single.clauseId, 'clause-4');
     });
   });
 }

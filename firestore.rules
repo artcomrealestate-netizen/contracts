@@ -104,18 +104,76 @@ service cloud.firestore {
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.status == 'DRAFT'
         && request.resource.data.version == 1;
-      // Only the creator may edit their own Draft, and only while it stays
-      // a Draft — Submit/Approve/Reject/Finalize (state transitions, and
-      // contract.edit_any for an admin editing someone else's) are the
-      // Approval Workflow phase's concern, not a plain edit.
-      allow update: if hasPermission('contract.edit_own')
-        && resource.data.createdBy == request.auth.uid
-        && resource.data.status == 'DRAFT'
-        && request.resource.data.status == 'DRAFT'
-        && request.resource.data.createdBy == resource.data.createdBy
-        && request.resource.data.contractNumber == resource.data.contractNumber
-        && request.resource.data.version == resource.data.version;
+
+      // Fields that must never change across ANY update, whoever performs it.
+      function contractCoreFieldsUnchanged() {
+        return request.resource.data.contractNumber == resource.data.contractNumber
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.version == resource.data.version
+          && request.resource.data.customerId == resource.data.customerId
+          && request.resource.data.propertyId == resource.data.propertyId
+          && request.resource.data.templateId == resource.data.templateId
+          && request.resource.data.templateVersion == resource.data.templateVersion;
+      }
+
+      // Owner editing clause content (or sourceQuotationId) on their own Draft.
+      function isOwnerEditingDraft() {
+        return hasPermission('contract.edit_own')
+          && resource.data.createdBy == request.auth.uid
+          && resource.data.status == 'DRAFT'
+          && request.resource.data.status == 'DRAFT';
+      }
+
+      // Owner submitting their own Draft for approval (TDD §23 Submit).
+      function isOwnerSubmitting() {
+        return hasPermission('contract.submit')
+          && resource.data.createdBy == request.auth.uid
+          && resource.data.status == 'DRAFT'
+          && request.resource.data.status == 'PENDING_APPROVAL';
+      }
+
+      // Admin approving a pending contract (TDD §23 Approve).
+      function isAdminApproving() {
+        return hasPermission('contract.approve')
+          && resource.data.status == 'PENDING_APPROVAL'
+          && request.resource.data.status == 'APPROVED'
+          && request.resource.data.approvedBy == request.auth.uid;
+      }
+
+      // Admin rejecting a pending contract (TDD §23/§24 Reject).
+      function isAdminRejecting() {
+        return hasPermission('contract.reject')
+          && resource.data.status == 'PENDING_APPROVAL'
+          && request.resource.data.status == 'REJECTED'
+          && request.resource.data.rejection.rejectedBy == request.auth.uid;
+      }
+
+      // Owner moving their own Rejected contract back to Draft to revise it.
+      function isOwnerRevising() {
+        return hasPermission('contract.edit_own')
+          && resource.data.createdBy == request.auth.uid
+          && resource.data.status == 'REJECTED'
+          && request.resource.data.status == 'DRAFT';
+      }
+
+      allow update: if contractCoreFieldsUnchanged()
+        && (isOwnerEditingDraft()
+            || isOwnerSubmitting()
+            || isAdminApproving()
+            || isAdminRejecting()
+            || isOwnerRevising());
+
       allow delete: if false;
+    }
+
+    // Business-significant contract transitions (TDD §31) — every contracts/
+    // write above adds exactly one of these in the same transaction. Only
+    // readable by admins; a client can add an entry (its own actorId only)
+    // but can never edit or remove one once written.
+    match /auditLogs/{logId} {
+      allow read: if hasPermission('audit.read');
+      allow create: if isActive() && request.resource.data.actorId == request.auth.uid;
+      allow update, delete: if false;
     }
 
     // The pre-existing quotation calculator (unrelated to the Contract
@@ -147,8 +205,8 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Everything else is deferred to later phases (approval workflow,
-    // finalization, ...) and denied by default until those rules are added.
+    // Everything else is deferred to later phases (finalization, invoice
+    // linking, ...) and denied by default until those rules are added.
     match /{document=**} {
       allow read, write: if false;
     }

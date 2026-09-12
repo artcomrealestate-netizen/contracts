@@ -14,9 +14,11 @@ const { doc, getDoc, setDoc, collection, addDoc, updateDoc, deleteDoc } = requir
 
 let testEnv;
 
-const OWNER = 'contract-owner'; // contract.read + contract.create + contract.edit_own
+const OWNER = 'contract-owner'; // contract.read + contract.create + contract.edit_own + contract.submit
 const OTHER_EMPLOYEE = 'other-employee'; // same permissions, different uid
 const NO_ACCESS = 'no-access';
+const ADMIN = 'contract-admin'; // contract.read + contract.approve + contract.reject
+const AUDITOR = 'auditor'; // contract.read + audit.read
 
 const baseContractData = (overrides = {}) => ({
   contractNumber: 'CTR-2026-000001',
@@ -49,18 +51,23 @@ beforeEach(async () => {
   await testEnv.clearFirestore();
   await testEnv.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
-    const permissions = { 'contract.read': true, 'contract.create': true, 'contract.edit_own': true };
+    const ownerPermissions = {
+      'contract.read': true,
+      'contract.create': true,
+      'contract.edit_own': true,
+      'contract.submit': true,
+    };
     await setDoc(doc(db, 'users', OWNER), {
       email: 'owner@example.com',
       role: 'employee',
       status: 'active',
-      permissions,
+      permissions: ownerPermissions,
     });
     await setDoc(doc(db, 'users', OTHER_EMPLOYEE), {
       email: 'other@example.com',
       role: 'employee',
       status: 'active',
-      permissions,
+      permissions: ownerPermissions,
     });
     await setDoc(doc(db, 'users', NO_ACCESS), {
       email: 'noaccess@example.com',
@@ -68,7 +75,27 @@ beforeEach(async () => {
       status: 'active',
       permissions: {},
     });
+    await setDoc(doc(db, 'users', ADMIN), {
+      email: 'admin@example.com',
+      role: 'admin',
+      status: 'active',
+      permissions: { 'contract.read': true, 'contract.approve': true, 'contract.reject': true },
+    });
+    await setDoc(doc(db, 'users', AUDITOR), {
+      email: 'auditor@example.com',
+      role: 'admin',
+      status: 'active',
+      permissions: { 'contract.read': true, 'audit.read': true },
+    });
     await setDoc(doc(db, 'contracts', 'existing-draft'), baseContractData());
+    await setDoc(
+      doc(db, 'contracts', 'existing-pending'),
+      baseContractData({
+        status: 'PENDING_APPROVAL',
+        clauses: [{ id: 'c1', order: 1, title: 'Payment Terms', content: '...', isLocked: false }],
+      })
+    );
+    await setDoc(doc(db, 'contracts', 'existing-rejected'), baseContractData({ status: 'REJECTED' }));
     await setDoc(doc(db, 'counters', 'contracts_2026'), { count: 1 });
   });
 });
@@ -131,6 +158,198 @@ describe('contracts/{contractId} rules', () => {
   it('contracts cannot be deleted', async () => {
     const db = testEnv.authenticatedContext(OWNER).firestore();
     await assertFails(deleteDoc(doc(db, 'contracts', 'existing-draft')));
+  });
+});
+
+describe('contracts/{contractId} — submit (TDD §23)', () => {
+  it('the owner with contract.submit can move their own Draft to PENDING_APPROVAL', async () => {
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(
+      updateDoc(doc(db, 'contracts', 'existing-draft'), { status: 'PENDING_APPROVAL', submittedAt: new Date() })
+    );
+  });
+
+  it('another employee cannot submit someone else\'s Draft', async () => {
+    const db = testEnv.authenticatedContext(OTHER_EMPLOYEE).firestore();
+    await assertFails(updateDoc(doc(db, 'contracts', 'existing-draft'), { status: 'PENDING_APPROVAL' }));
+  });
+
+  it('cannot submit a contract that is not currently DRAFT', async () => {
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertFails(updateDoc(doc(db, 'contracts', 'existing-pending'), { status: 'PENDING_APPROVAL' }));
+  });
+});
+
+describe('contracts/{contractId} — approve (TDD §23)', () => {
+  it('an admin with contract.approve can approve a pending contract', async () => {
+    const db = testEnv.authenticatedContext(ADMIN).firestore();
+    await assertSucceeds(
+      updateDoc(doc(db, 'contracts', 'existing-pending'), {
+        status: 'APPROVED',
+        approvedAt: new Date(),
+        approvedBy: ADMIN,
+      })
+    );
+  });
+
+  it('cannot approve while pretending to be a different approver', async () => {
+    const db = testEnv.authenticatedContext(ADMIN).firestore();
+    await assertFails(
+      updateDoc(doc(db, 'contracts', 'existing-pending'), { status: 'APPROVED', approvedBy: OTHER_EMPLOYEE })
+    );
+  });
+
+  it('the owner (without contract.approve) cannot approve their own contract', async () => {
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      updateDoc(doc(db, 'contracts', 'existing-pending'), { status: 'APPROVED', approvedBy: OWNER })
+    );
+  });
+
+  it('cannot approve a Draft directly (must go through PENDING_APPROVAL)', async () => {
+    const db = testEnv.authenticatedContext(ADMIN).firestore();
+    await assertFails(
+      updateDoc(doc(db, 'contracts', 'existing-draft'), { status: 'APPROVED', approvedBy: ADMIN })
+    );
+  });
+});
+
+describe('contracts/{contractId} — reject (TDD §23/§24)', () => {
+  it('an admin with contract.reject can reject a pending contract with a rejection object', async () => {
+    const db = testEnv.authenticatedContext(ADMIN).firestore();
+    await assertSucceeds(
+      updateDoc(doc(db, 'contracts', 'existing-pending'), {
+        status: 'REJECTED',
+        rejection: { generalNote: 'Revise payment terms.', rejectedBy: ADMIN, clauses: [] },
+      })
+    );
+  });
+
+  it('cannot reject while pretending to be a different rejector', async () => {
+    const db = testEnv.authenticatedContext(ADMIN).firestore();
+    await assertFails(
+      updateDoc(doc(db, 'contracts', 'existing-pending'), {
+        status: 'REJECTED',
+        rejection: { generalNote: 'Revise.', rejectedBy: OTHER_EMPLOYEE, clauses: [] },
+      })
+    );
+  });
+
+  it('an employee without contract.reject cannot reject', async () => {
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      updateDoc(doc(db, 'contracts', 'existing-pending'), {
+        status: 'REJECTED',
+        rejection: { generalNote: 'Revise.', rejectedBy: OWNER, clauses: [] },
+      })
+    );
+  });
+});
+
+describe('contracts/{contractId} — revise a rejected contract', () => {
+  it('the owner with contract.edit_own can move their own Rejected contract back to Draft', async () => {
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(updateDoc(doc(db, 'contracts', 'existing-rejected'), { status: 'DRAFT' }));
+  });
+
+  it('another employee cannot revise someone else\'s Rejected contract', async () => {
+    const db = testEnv.authenticatedContext(OTHER_EMPLOYEE).firestore();
+    await assertFails(updateDoc(doc(db, 'contracts', 'existing-rejected'), { status: 'DRAFT' }));
+  });
+
+  it('cannot move a Draft (not Rejected) contract using the revise path', async () => {
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    // Already DRAFT -> DRAFT, so this actually exercises isOwnerEditingDraft,
+    // not isOwnerRevising — included to document that revise only applies
+    // to a REJECTED starting state, not as a no-op alternate path.
+    await assertSucceeds(updateDoc(doc(db, 'contracts', 'existing-draft'), { status: 'DRAFT' }));
+  });
+});
+
+describe('auditLogs/{logId} rules', () => {
+  it('an active user can create an audit log entry with themself as actorId', async () => {
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(
+      addDoc(collection(db, 'auditLogs'), {
+        entityType: 'contract',
+        entityId: 'existing-draft',
+        action: 'SUBMITTED',
+        actorId: OWNER,
+        fromStatus: 'DRAFT',
+        toStatus: 'PENDING_APPROVAL',
+        metadata: {},
+      })
+    );
+  });
+
+  it('cannot create an audit log entry impersonating a different actor', async () => {
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      addDoc(collection(db, 'auditLogs'), {
+        entityType: 'contract',
+        entityId: 'existing-draft',
+        action: 'SUBMITTED',
+        actorId: OTHER_EMPLOYEE,
+        fromStatus: 'DRAFT',
+        toStatus: 'PENDING_APPROVAL',
+        metadata: {},
+      })
+    );
+  });
+
+  it('a user with audit.read can read audit logs', async () => {
+    const db = testEnv.authenticatedContext(AUDITOR).firestore();
+    let logId;
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const ref = await addDoc(collection(context.firestore(), 'auditLogs'), {
+        entityType: 'contract',
+        entityId: 'existing-draft',
+        action: 'SUBMITTED',
+        actorId: OWNER,
+        fromStatus: 'DRAFT',
+        toStatus: 'PENDING_APPROVAL',
+        metadata: {},
+      });
+      logId = ref.id;
+    });
+    await assertSucceeds(getDoc(doc(db, 'auditLogs', logId)));
+  });
+
+  it('a user without audit.read cannot read audit logs', async () => {
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    let logId;
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const ref = await addDoc(collection(context.firestore(), 'auditLogs'), {
+        entityType: 'contract',
+        entityId: 'existing-draft',
+        action: 'SUBMITTED',
+        actorId: OWNER,
+        fromStatus: 'DRAFT',
+        toStatus: 'PENDING_APPROVAL',
+        metadata: {},
+      });
+      logId = ref.id;
+    });
+    await assertFails(getDoc(doc(db, 'auditLogs', logId)));
+  });
+
+  it('audit log entries can never be updated or deleted', async () => {
+    const db = testEnv.authenticatedContext(AUDITOR).firestore();
+    let logId;
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const ref = await addDoc(collection(context.firestore(), 'auditLogs'), {
+        entityType: 'contract',
+        entityId: 'existing-draft',
+        action: 'SUBMITTED',
+        actorId: OWNER,
+        fromStatus: 'DRAFT',
+        toStatus: 'PENDING_APPROVAL',
+        metadata: {},
+      });
+      logId = ref.id;
+    });
+    await assertFails(updateDoc(doc(db, 'auditLogs', logId), { action: 'TAMPERED' }));
+    await assertFails(deleteDoc(doc(db, 'auditLogs', logId)));
   });
 });
 
