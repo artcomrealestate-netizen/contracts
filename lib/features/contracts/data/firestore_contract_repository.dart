@@ -299,8 +299,12 @@ class FirestoreContractRepository implements ContractRepository {
   }
 
   @override
-  Stream<List<Contract>> watchContracts() {
-    return _contracts.orderBy('createdAt', descending: true).snapshots().map(
+  Stream<List<Contract>> watchContracts({String? ownerId}) {
+    Query<Map<String, dynamic>> query = _contracts.orderBy('createdAt', descending: true);
+    if (ownerId != null) {
+      query = query.where('createdBy', isEqualTo: ownerId);
+    }
+    return query.snapshots().map(
           (snapshot) => snapshot.docs.map(_fromDoc).toList(),
         );
   }

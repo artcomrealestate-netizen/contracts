@@ -46,6 +46,10 @@ abstract class ContractRepository {
   Stream<Contract?> watchContract(String id);
 
   /// Newest-first. No pagination yet (TDD §36 pagination lands with
-  /// Dashboard/Search, phase 10) — fine for the small lists this phase deals with.
-  Stream<List<Contract>> watchContracts();
+  /// Dashboard/Search, phase 10) — fine for the small lists this phase deals
+  /// with. [ownerId] restricts the list to contracts that user created —
+  /// pass it for anyone without contract.edit_any (an admin-level scope);
+  /// the Firestore rules require a matching query filter for non-admins
+  /// regardless, so the caller can't just filter the result client-side.
+  Stream<List<Contract>> watchContracts({String? ownerId});
 }

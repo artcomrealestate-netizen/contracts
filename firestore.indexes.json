@@ -7,6 +7,14 @@
         { "fieldPath": "templateId", "order": "ASCENDING" },
         { "fieldPath": "version", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "contracts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "createdBy", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

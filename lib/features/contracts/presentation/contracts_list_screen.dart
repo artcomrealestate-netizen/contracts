@@ -15,10 +15,15 @@ class ContractsListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authControllerProvider).value;
     final canCreate = user?.hasPermission(Permission.contractCreate) ?? false;
-    final contractsAsync = ref.watch(contractsStreamProvider);
+    // contract.edit_any is the existing "admin-level, not just own" scope
+    // (already used to gate editing someone else's contract) — reused here
+    // for visibility too: without it, only your own contracts are listed.
+    final seesAllContracts = user?.hasPermission(Permission.contractEditAny) ?? false;
+    final ownerId = seesAllContracts ? null : user?.id;
+    final contractsAsync = ref.watch(contractsStreamProvider(ownerId));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Contracts')),
+      appBar: AppBar(title: Text(seesAllContracts ? 'All Contracts' : 'My Contracts')),
       body: contractsAsync.when(
         data: (contracts) {
           if (contracts.isEmpty) {

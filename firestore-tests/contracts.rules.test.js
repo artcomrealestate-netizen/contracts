@@ -5,7 +5,18 @@ const {
   assertSucceeds,
   assertFails,
 } = require('@firebase/rules-unit-testing');
-const { doc, getDoc, setDoc, collection, addDoc, updateDoc, deleteDoc } = require('firebase/firestore');
+const {
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  collection,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
+} = require('firebase/firestore');
 
 // Mirrors docs/Contract_System_TDD_v1.1_EN.md §17/§22/§39/§40: a contract is
 // always born a Draft owned by its creator, only that creator may edit it
@@ -17,7 +28,7 @@ let testEnv;
 const OWNER = 'contract-owner'; // contract.read + contract.create + contract.edit_own + contract.submit
 const OTHER_EMPLOYEE = 'other-employee'; // same permissions, different uid
 const NO_ACCESS = 'no-access';
-const ADMIN = 'contract-admin'; // contract.read + contract.approve + contract.reject
+const ADMIN = 'contract-admin'; // contract.read + contract.edit_any + contract.approve + contract.reject
 const AUDITOR = 'auditor'; // contract.read + audit.read
 
 const baseContractData = (overrides = {}) => ({
@@ -79,7 +90,12 @@ beforeEach(async () => {
       email: 'admin@example.com',
       role: 'admin',
       status: 'active',
-      permissions: { 'contract.read': true, 'contract.approve': true, 'contract.reject': true },
+      permissions: {
+        'contract.read': true,
+        'contract.edit_any': true,
+        'contract.approve': true,
+        'contract.reject': true,
+      },
     });
     await setDoc(doc(db, 'users', AUDITOR), {
       email: 'auditor@example.com',
@@ -101,7 +117,7 @@ beforeEach(async () => {
 });
 
 describe('contracts/{contractId} rules', () => {
-  it('a user with contract.read can read a contract', async () => {
+  it('the owner with contract.read can read their own contract', async () => {
     const db = testEnv.authenticatedContext(OWNER).firestore();
     await assertSucceeds(getDoc(doc(db, 'contracts', 'existing-draft')));
   });
@@ -109,6 +125,32 @@ describe('contracts/{contractId} rules', () => {
   it('a user without contract.read cannot read a contract', async () => {
     const db = testEnv.authenticatedContext(NO_ACCESS).firestore();
     await assertFails(getDoc(doc(db, 'contracts', 'existing-draft')));
+  });
+
+  it('another employee with contract.read but not contract.edit_any cannot read someone else\'s contract', async () => {
+    const db = testEnv.authenticatedContext(OTHER_EMPLOYEE).firestore();
+    await assertFails(getDoc(doc(db, 'contracts', 'existing-draft')));
+  });
+
+  it('an admin with contract.edit_any can read any contract, not just their own', async () => {
+    const db = testEnv.authenticatedContext(ADMIN).firestore();
+    await assertSucceeds(getDoc(doc(db, 'contracts', 'existing-draft')));
+  });
+
+  it('a plain employee can list only their own contracts, filtered by createdBy', async () => {
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    const q = query(collection(db, 'contracts'), where('createdBy', '==', OWNER));
+    await assertSucceeds(getDocs(q));
+  });
+
+  it('a plain employee cannot list contracts without filtering by their own createdBy', async () => {
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertFails(getDocs(collection(db, 'contracts')));
+  });
+
+  it('an admin with contract.edit_any can list all contracts, unfiltered', async () => {
+    const db = testEnv.authenticatedContext(ADMIN).firestore();
+    await assertSucceeds(getDocs(collection(db, 'contracts')));
   });
 
   it('contract.create can create a DRAFT with themself as createdBy', async () => {

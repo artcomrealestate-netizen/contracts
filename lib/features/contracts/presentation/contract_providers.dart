@@ -9,8 +9,10 @@ final contractRepositoryProvider = Provider<ContractRepository>((ref) {
   return FirestoreContractRepository(ref.watch(firestoreProvider));
 });
 
-final contractsStreamProvider = StreamProvider<List<Contract>>((ref) {
-  return ref.watch(contractRepositoryProvider).watchContracts();
+/// Family key is the owner scope: null sees every contract (contract.edit_any
+/// — an admin-level scope), a uid restricts to that user's own contracts.
+final contractsStreamProvider = StreamProvider.family<List<Contract>, String?>((ref, ownerId) {
+  return ref.watch(contractRepositoryProvider).watchContracts(ownerId: ownerId);
 });
 
 final contractByIdProvider = StreamProvider.family<Contract?, String>((ref, id) {

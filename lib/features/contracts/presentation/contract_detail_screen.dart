@@ -64,14 +64,25 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
     }
   }
 
+  // Locked normally means "can't be touched while creating/editing a
+  // contract" (it's protected boilerplate from the template) — but if an
+  // admin specifically flagged it as needing revision, leaving it locked
+  // would make the contract permanently unapprovable: the owner could never
+  // act on the one piece of feedback that mattered. Being flagged unlocks
+  // it, only for this contract, only until it's re-reviewed.
+  bool _isClauseEditable(ContractClause clause) =>
+      !clause.isLocked || clause.reviewStatus == ClauseReviewStatus.needsRevision;
+
   Future<void> _saveDraftClauses(Contract contract) async {
     final updated = contract.clauses
         .map((c) => ContractClause(
               id: c.id,
               order: c.order,
               title: c.title,
-              content: c.isLocked ? c.content : _clauseControllers[c.id]!.text.trim(),
+              content: _isClauseEditable(c) ? _clauseControllers[c.id]!.text.trim() : c.content,
               isLocked: c.isLocked,
+              reviewStatus: c.reviewStatus,
+              rejectionNote: c.rejectionNote,
             ))
         .toList();
     await ref.read(contractRepositoryProvider).updateDraftClauses(contract.id, updated);
@@ -195,7 +206,15 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
                           children: [
                             Expanded(
                                 child: Text(clause.title, style: Theme.of(context).textTheme.titleSmall)),
-                            if (clause.isLocked) const Icon(Icons.lock_outline, size: 16),
+                            if (clause.isLocked)
+                              Icon(
+                                Icons.lock_outline,
+                                size: 16,
+                                // Still shows locked, but a flagged clause is
+                                // editable below despite the icon — greyed
+                                // out to hint it's not really blocking here.
+                                color: _isClauseEditable(clause) ? Colors.grey.shade400 : null,
+                              ),
                             if (clause.reviewStatus == ClauseReviewStatus.needsRevision)
                               const Padding(
                                 padding: EdgeInsets.only(left: 6),
@@ -204,7 +223,7 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
                           ],
                         ),
                         const SizedBox(height: 8),
-                        if (canEditDraft && !clause.isLocked)
+                        if (canEditDraft && _isClauseEditable(clause))
                           TextFormField(
                             key: Key('contractDetailClauseField_${clause.id}'),
                             controller: _clauseControllers[clause.id],

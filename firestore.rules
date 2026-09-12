@@ -97,7 +97,13 @@ service cloud.firestore {
     }
 
     match /contracts/{contractId} {
-      allow read: if hasPermission('contract.read');
+      // contract.edit_any doubles as the "admin-level, sees everything" scope
+      // here, not just an editing one — an employee with only contract.read
+      // can read their own contracts (a get() by id, or a list() query the
+      // client must filter by createdBy == uid to satisfy this same check —
+      // see FirestoreContractRepository.watchContracts).
+      allow read: if hasPermission('contract.read')
+        && (hasPermission('contract.edit_any') || resource.data.createdBy == request.auth.uid);
       // Every contract is born a Draft with a fresh server-assigned number
       // (TDD §39) — version pinned to 1, exactly like a template's v1.
       allow create: if hasPermission('contract.create')
