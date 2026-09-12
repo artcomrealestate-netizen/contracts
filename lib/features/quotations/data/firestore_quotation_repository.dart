@@ -45,6 +45,12 @@ class FirestoreQuotationRepository implements QuotationRepository {
   }
 
   @override
+  Future<bool> quotaNumberExists(String quotaNumber) async {
+    final snapshot = await _quotations.where('quotaNumber', isEqualTo: quotaNumber).limit(1).get();
+    return snapshot.docs.isNotEmpty;
+  }
+
+  @override
   Future<void> delete(String id) => _quotations.doc(id).delete();
 
   @override

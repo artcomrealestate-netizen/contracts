@@ -32,6 +32,13 @@ class SavedQuotation {
   final double hemayaInsuranceRate;
   final double hemayaContractFeeRate;
 
+  /// Set only when LocalQuotationMigrator had to assign a fresh quotaNumber
+  /// during the one-time local-archive-to-Firestore migration, because the
+  /// device's original number collided with one already in Firestore (e.g.
+  /// two devices independently reached the same local QT-YYYY-NNN before
+  /// this update). Null for every quotation created normally.
+  final String? renumberedFrom;
+
   const SavedQuotation({
     required this.id,
     required this.quotaNumber,
@@ -65,6 +72,7 @@ class SavedQuotation {
     this.contractCertFee = 160,
     this.hemayaInsuranceRate = 1500,
     this.hemayaContractFeeRate = 500,
+    this.renumberedFrom,
   });
 
   Map<String, dynamic> toJson() => {
@@ -100,6 +108,7 @@ class SavedQuotation {
         'contractCertFee': contractCertFee,
         'hemayaInsuranceRate': hemayaInsuranceRate,
         'hemayaContractFeeRate': hemayaContractFeeRate,
+        'renumberedFrom': renumberedFrom,
       };
 
   factory SavedQuotation.fromJson(Map<String, dynamic> json) {
@@ -140,6 +149,7 @@ class SavedQuotation {
       contractCertFee: (json['contractCertFee'] as num?)?.toDouble() ?? 160,
       hemayaInsuranceRate: (json['hemayaInsuranceRate'] as num?)?.toDouble() ?? 1500,
       hemayaContractFeeRate: (json['hemayaContractFeeRate'] as num?)?.toDouble() ?? 500,
+      renumberedFrom: json['renumberedFrom'] as String?,
     );
   }
 }

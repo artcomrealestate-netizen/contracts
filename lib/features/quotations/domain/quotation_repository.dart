@@ -8,6 +8,11 @@ abstract class QuotationRepository {
 
   Future<void> add(SavedQuotation quotation, {required String createdBy});
 
+  /// Used only by LocalQuotationMigrator to detect a quotaNumber collision
+  /// (two devices that independently reached the same local number) before
+  /// migrating a legacy local quotation into Firestore.
+  Future<bool> quotaNumberExists(String quotaNumber);
+
   Future<void> delete(String id);
 
   /// Newest-first.

@@ -37,6 +37,11 @@ class FakeQuotationRepository implements QuotationRepository {
   }
 
   @override
+  Future<bool> quotaNumberExists(String quotaNumber) async {
+    return _quotations.any((q) => q.quotaNumber == quotaNumber);
+  }
+
+  @override
   Future<void> delete(String id) async {
     _quotations.removeWhere((q) => q.id == id);
     _controller.add(_newestFirst);

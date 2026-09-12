@@ -187,7 +187,8 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
                   final quotations = allQuotations.where((q) {
                     if (query.isEmpty) return true;
                     return q.customerName.toLowerCase().contains(query) ||
-                        q.quotaNumber.toLowerCase().contains(query);
+                        q.quotaNumber.toLowerCase().contains(query) ||
+                        (q.renumberedFrom?.toLowerCase().contains(query) ?? false);
                   }).toList();
 
                   if (quotations.isEmpty) {
@@ -209,7 +210,17 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text(quotation.quotaNumber, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(quotation.quotaNumber, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                      if (quotation.renumberedFrom != null)
+                                        Text(
+                                          'Originally ${quotation.renumberedFrom} — renumbered on migration',
+                                          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                        ),
+                                    ],
+                                  ),
                                   Text(formatQuotationDate(quotation.createdAt)),
                                 ],
                               ),

@@ -483,6 +483,31 @@ void main() {
       expect(restored.finalPrice, quotation.finalPrice);
     });
 
+    test('round-trips renumberedFrom, and defaults to null when absent (quotations saved before this feature)', () {
+      final quotation = SavedQuotation(
+        id: 'q-renumbered',
+        quotaNumber: 'QT-2026-042',
+        customerName: 'Renumbered Customer',
+        createdAt: DateTime(2026, 1, 1),
+        roomType: 'Small',
+        quantity: 1,
+        priceMonth: 1000,
+        vat: 0,
+        cd: 0,
+        camera: 0,
+        deposit: 0,
+        numberOfPayments: 1,
+        yearlyPrice: 12000,
+        finalPrice: 12000,
+        renumberedFrom: 'QT-2026-001',
+      );
+
+      expect(SavedQuotation.fromJson(quotation.toJson()).renumberedFrom, 'QT-2026-001');
+
+      final legacyJson = quotation.toJson()..remove('renumberedFrom');
+      expect(SavedQuotation.fromJson(legacyJson).renumberedFrom, isNull);
+    });
+
     test('defaults contractMonths to 12 when absent from JSON (quotations saved before this feature)', () {
       final quotation = SavedQuotation(
         id: 'q-legacy',
