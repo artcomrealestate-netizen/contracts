@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../company/presentation/company_profile_screen.dart';
 import '../../contracts/presentation/contracts_list_screen.dart';
 import '../../customers/presentation/customers_list_screen.dart';
 import '../../dashboard/presentation/dashboard_screen.dart';
@@ -147,6 +148,16 @@ class ContractsHomeScreen extends ConsumerWidget {
                       ),
                     );
                   }),
+                if (user?.hasPermission(Permission.userManage) ?? false)
+                  ListTile(
+                    key: const Key('companyProfileMenuTile'),
+                    leading: const Icon(Icons.apartment),
+                    title: const Text('Company Profile'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const CompanyProfileScreen()),
+                    ),
+                  ),
               ],
             ),
           ),

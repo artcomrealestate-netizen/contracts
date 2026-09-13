@@ -19,16 +19,28 @@ class FirestoreTemplateRepository implements TemplateRepository {
   Map<String, dynamic> _clauseToMap(TemplateClause clause) => {
         'id': clause.id,
         'order': clause.order,
-        'title': clause.title,
-        'content': clause.content,
+        'titleAr': clause.titleAr,
+        'titleEn': clause.titleEn,
+        'contentAr': clause.contentAr,
+        'contentEn': clause.contentEn,
+        // Kept alongside the bilingual fields for one release as a safety
+        // net for any unreviewed code path still reading the old single-
+        // string shape; safe to drop once confirmed unused.
+        'title': clause.titleEn,
+        'content': clause.contentEn,
         'isLocked': clause.isLocked,
       };
 
   TemplateClause _clauseFromMap(Map<String, dynamic> map) => TemplateClause(
         id: map['id'] as String? ?? '',
         order: (map['order'] as num?)?.toInt() ?? 0,
-        title: map['title'] as String? ?? '',
-        content: map['content'] as String? ?? '',
+        // Falls back to the pre-bilingual single `title`/`content` string
+        // (assumed English-authored) for documents written before this
+        // field split — see TemplateClause's doc comment.
+        titleEn: map['titleEn'] as String? ?? map['title'] as String? ?? '',
+        titleAr: map['titleAr'] as String? ?? '',
+        contentEn: map['contentEn'] as String? ?? map['content'] as String? ?? '',
+        contentAr: map['contentAr'] as String? ?? '',
         isLocked: map['isLocked'] as bool? ?? false,
       );
 

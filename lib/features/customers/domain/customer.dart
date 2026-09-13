@@ -20,11 +20,16 @@ class IndividualDetails {
   final String fullName;
   final String? emiratesId;
   final String? passportNumber;
+  // A company customer already has `legalName` for this; an individual
+  // tenant can still operate under a trade name (e.g. leasing as themself
+  // but running a business from the unit) with nowhere else to record it.
+  final String? tradeName;
 
   const IndividualDetails({
     required this.fullName,
     this.emiratesId,
     this.passportNumber,
+    this.tradeName,
   });
 }
 

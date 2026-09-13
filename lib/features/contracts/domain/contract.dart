@@ -1,4 +1,5 @@
 import 'contract_clause.dart';
+import 'lease_terms.dart';
 import 'rejection.dart';
 
 /// The full state machine from TDD §22. Draft, Pending Approval, Rejected,
@@ -64,6 +65,7 @@ class Contract {
   final String templateId;
   final int templateVersion;
   final List<ContractClause> clauses;
+  final LeaseTerms leaseTerms;
   final String createdBy;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -85,6 +87,7 @@ class Contract {
     required this.templateVersion,
     required this.clauses,
     required this.createdBy,
+    this.leaseTerms = const LeaseTerms(),
     this.sourceQuotationId,
     this.createdAt,
     this.updatedAt,

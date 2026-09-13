@@ -8,23 +8,10 @@ import '../../properties/presentation/property_providers.dart';
 import '../../quotations/presentation/quotation_providers.dart';
 import '../../templates/presentation/template_providers.dart';
 import '../domain/contract_clause.dart';
+import '../domain/lease_terms.dart';
+import 'contract_clause_list_field.dart';
 import 'contract_providers.dart';
-
-class _ContractClauseDraft {
-  final String id;
-  final int order;
-  final String title;
-  final bool isLocked;
-  final TextEditingController contentController;
-
-  _ContractClauseDraft({
-    required this.id,
-    required this.order,
-    required this.title,
-    required this.isLocked,
-    required String content,
-  }) : contentController = TextEditingController(text: content);
-}
+import 'lease_terms_form_section.dart';
 
 class CreateContractScreen extends ConsumerStatefulWidget {
   const CreateContractScreen({super.key});
@@ -41,28 +28,18 @@ class _CreateContractScreenState extends ConsumerState<CreateContractScreen> {
   String? _templateId;
   int? _templateVersion;
   String? _sourceQuotationId;
-  List<_ContractClauseDraft> _clauseDrafts = [];
+  List<ContractClause> _clauses = [];
+  LeaseTerms _leaseTerms = const LeaseTerms();
   bool _loadingClauses = false;
 
   bool _submitting = false;
   String? _errorMessage;
 
-  @override
-  void dispose() {
-    for (final draft in _clauseDrafts) {
-      draft.contentController.dispose();
-    }
-    super.dispose();
-  }
-
   Future<void> _onTemplateSelected(String? templateId) async {
-    for (final draft in _clauseDrafts) {
-      draft.contentController.dispose();
-    }
     setState(() {
       _templateId = templateId;
       _templateVersion = null;
-      _clauseDrafts = [];
+      _clauses = [];
       _loadingClauses = templateId != null;
     });
     if (templateId == null) return;
@@ -73,13 +50,15 @@ class _CreateContractScreenState extends ConsumerState<CreateContractScreen> {
     setState(() {
       _loadingClauses = false;
       _templateVersion = current?.version;
-      _clauseDrafts = (current?.clauses ?? [])
-          .map((c) => _ContractClauseDraft(
+      _clauses = (current?.clauses ?? [])
+          .map((c) => ContractClause(
                 id: c.id,
                 order: c.order,
-                title: c.title,
+                titleAr: c.titleAr,
+                titleEn: c.titleEn,
+                contentAr: c.contentAr,
+                contentEn: c.contentEn,
                 isLocked: c.isLocked,
-                content: c.content,
               ))
           .toList();
     });
@@ -117,23 +96,15 @@ class _CreateContractScreenState extends ConsumerState<CreateContractScreen> {
         _showError('Not signed in — please sign in again.');
         return;
       }
-      final clauses = _clauseDrafts
-          .map((draft) => ContractClause(
-                id: draft.id,
-                order: draft.order,
-                title: draft.title,
-                content: draft.contentController.text.trim(),
-                isLocked: draft.isLocked,
-              ))
-          .toList();
       await ref.read(contractRepositoryProvider).createDraftContract(
             customerId: _customerId!,
             propertyId: _propertyId!,
             templateId: _templateId!,
             templateVersion: _templateVersion!,
-            clauses: clauses,
+            clauses: _clauses,
             createdBy: currentUser.id,
             sourceQuotationId: _sourceQuotationId,
+            leaseTerms: _leaseTerms,
           );
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
@@ -241,6 +212,11 @@ class _CreateContractScreenState extends ConsumerState<CreateContractScreen> {
               error: (error, _) => Text('Failed to load templates: $error'),
             ),
             const SizedBox(height: 20),
+            LeaseTermsFormSection(
+              initial: _leaseTerms,
+              onChanged: (terms) => _leaseTerms = terms,
+            ),
+            const SizedBox(height: 20),
             if (_templateId != null) ...[
               Text('Clauses', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
@@ -250,35 +226,12 @@ class _CreateContractScreenState extends ConsumerState<CreateContractScreen> {
                   child: LinearProgressIndicator(),
                 )
               else
-                for (var i = 0; i < _clauseDrafts.length; i++)
-                  Card(
-                    key: Key('contractClauseCard_$i'),
-                    margin: const EdgeInsets.only(bottom: 12),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(_clauseDrafts[i].title, style: Theme.of(context).textTheme.titleSmall),
-                              ),
-                              if (_clauseDrafts[i].isLocked) const Icon(Icons.lock_outline, size: 16),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          TextFormField(
-                            key: Key('contractClauseContentField_$i'),
-                            controller: _clauseDrafts[i].contentController,
-                            maxLines: 3,
-                            enabled: !_clauseDrafts[i].isLocked,
-                            decoration: const InputDecoration(labelText: 'Content'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                ContractClauseListField(
+                  key: ValueKey('contract-clauses-$_templateId'),
+                  initialClauses: _clauses,
+                  onChanged: (clauses) => _clauses = clauses,
+                  isClauseEditable: (_) => true,
+                ),
             ],
             const SizedBox(height: 24),
             ElevatedButton(

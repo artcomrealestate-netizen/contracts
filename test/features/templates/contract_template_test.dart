@@ -31,8 +31,32 @@ void main() {
 
   group('TemplateClause', () {
     test('defaults isLocked to false', () {
-      const clause = TemplateClause(id: 'c1', order: 1, title: 'Payment Terms', content: '...');
+      const clause = TemplateClause(
+        id: 'c1',
+        order: 1,
+        titleEn: 'Payment Terms',
+        titleAr: 'شروط الدفع',
+        contentEn: '...',
+        contentAr: '...',
+      );
       expect(clause.isLocked, isFalse);
+    });
+
+    test('title/content getters prefer English, fall back to Arabic', () {
+      const bilingual = TemplateClause(
+        id: 'c1',
+        order: 1,
+        titleEn: 'Payment Terms',
+        titleAr: 'شروط الدفع',
+        contentEn: 'Pay on time.',
+        contentAr: 'ادفع في الوقت المحدد.',
+      );
+      expect(bilingual.title, 'Payment Terms');
+      expect(bilingual.content, 'Pay on time.');
+
+      const arabicOnly = TemplateClause(id: 'c2', order: 1, titleEn: '', titleAr: 'شروط الدفع', contentEn: '', contentAr: 'ادفع.');
+      expect(arabicOnly.title, 'شروط الدفع');
+      expect(arabicOnly.content, 'ادفع.');
     });
   });
 }

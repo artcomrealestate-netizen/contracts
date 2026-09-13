@@ -67,6 +67,17 @@ service cloud.firestore {
       allow update: if isOwnUserDoc(userId) && isActive() && adminOnlyFieldsUnchanged();
     }
 
+    // Shared company profile (owner/lessor legal-signatory name+Emirates ID
+    // and logo) used by every teammate's contract PDF export — a single
+    // `main` document, not per-user, so it must live in Firestore rather
+    // than the legacy per-device AppSettings. Any active user needs read
+    // access since anyone exporting a contract PDF resolves {{ownerName}}/
+    // {{ownerEmiratesId}} placeholders from it; only an admin may change it.
+    match /companyProfile/{docId} {
+      allow read: if isActive();
+      allow write: if isAdmin();
+    }
+
     match /customers/{customerId} {
       allow read: if hasPermission('customer.read');
       allow create: if hasPermission('customer.create')

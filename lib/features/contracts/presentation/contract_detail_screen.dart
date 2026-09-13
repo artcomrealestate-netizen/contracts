@@ -9,12 +9,19 @@ import '../../../main.dart';
 import '../../../pdf/contract_pdf_builder.dart';
 import '../../auth/domain/permission.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../company/domain/company_profile.dart';
+import '../../company/presentation/company_profile_providers.dart';
+import '../../customers/domain/customer.dart';
 import '../../customers/presentation/customer_providers.dart';
+import '../../properties/domain/property.dart';
 import '../../properties/presentation/property_providers.dart';
 import '../../quotations/presentation/quotation_providers.dart';
 import '../domain/contract.dart';
 import '../domain/contract_clause.dart';
+import '../domain/lease_terms.dart';
+import 'contract_clause_list_field.dart';
 import 'contract_providers.dart';
+import 'lease_terms_form_section.dart';
 import 'reject_contract_dialog.dart';
 
 class ContractDetailScreen extends ConsumerStatefulWidget {
@@ -30,35 +37,23 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
   bool _busy = false;
   String? _errorMessage;
 
-  // Draft-editing state: only built once per contract version so typed
+  // Draft-editing state: only (re)seeded once per contract version so typed
   // edits aren't clobbered by every live-stream tick.
   String? _editingForContractId;
   DateTime? _editingForUpdatedAt;
-  final Map<String, TextEditingController> _clauseControllers = {};
   String? _selectedCustomerId;
   String? _selectedPropertyId;
+  List<ContractClause> _editedClauses = [];
+  LeaseTerms _editedLeaseTerms = const LeaseTerms();
 
-  void _ensureEditingControllers(Contract contract) {
+  void _ensureEditingState(Contract contract) {
     if (_editingForContractId == contract.id && _editingForUpdatedAt == contract.updatedAt) return;
-    for (final controller in _clauseControllers.values) {
-      controller.dispose();
-    }
-    _clauseControllers.clear();
-    for (final clause in contract.clauses) {
-      _clauseControllers[clause.id] = TextEditingController(text: clause.content);
-    }
     _selectedCustomerId = contract.customerId;
     _selectedPropertyId = contract.propertyId;
+    _editedClauses = contract.clauses;
+    _editedLeaseTerms = contract.leaseTerms;
     _editingForContractId = contract.id;
     _editingForUpdatedAt = contract.updatedAt;
-  }
-
-  @override
-  void dispose() {
-    for (final controller in _clauseControllers.values) {
-      controller.dispose();
-    }
-    super.dispose();
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -84,41 +79,27 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
   bool _isClauseEditable(ContractClause clause) =>
       !clause.isLocked || clause.reviewStatus == ClauseReviewStatus.needsRevision;
 
-  Future<void> _exportPdf(Contract contract, String customerName, String propertyName) async {
+  Future<void> _exportPdf(Contract contract, Customer customer, Property property) async {
     final settings = legacy_provider.Provider.of<AppSettings>(context, listen: false);
+    final companyProfile = ref.read(companyProfileProvider).value ?? CompanyProfile.empty();
     final bytes = await buildContractPdfBytes(
       settings: settings,
+      companyProfile: companyProfile,
       bundle: rootBundle,
-      contractNumber: contract.contractNumber,
-      statusLabel: contractStatusToString(contract.status),
-      customerName: customerName,
-      propertyName: propertyName,
-      templateVersion: contract.templateVersion,
-      clauses: contract.clauses,
-      createdAt: contract.createdAt,
-      submittedAt: contract.submittedAt,
-      approvedAt: contract.approvedAt,
+      contract: contract,
+      customer: customer,
+      property: property,
     );
     await PrintingPdfSharer().sharePdf(bytes: bytes, filename: '${contract.contractNumber}.pdf');
   }
 
   Future<void> _saveDraftClauses(Contract contract) async {
-    final updated = contract.clauses
-        .map((c) => ContractClause(
-              id: c.id,
-              order: c.order,
-              title: c.title,
-              content: _isClauseEditable(c) ? _clauseControllers[c.id]!.text.trim() : c.content,
-              isLocked: c.isLocked,
-              reviewStatus: c.reviewStatus,
-              rejectionNote: c.rejectionNote,
-            ))
-        .toList();
     await ref.read(contractRepositoryProvider).updateDraft(
           contract.id,
-          updated,
+          _editedClauses,
           customerId: _selectedCustomerId != contract.customerId ? _selectedCustomerId : null,
           propertyId: _selectedPropertyId != contract.propertyId ? _selectedPropertyId : null,
+          leaseTerms: _editedLeaseTerms,
         );
   }
 
@@ -151,12 +132,12 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
         final canReject = contract.status == ContractStatus.pendingApproval && (user?.hasPermission(Permission.contractReject) ?? false);
         final canFinalize = contract.status == ContractStatus.approved && (user?.hasPermission(Permission.contractFinalize) ?? false);
 
-        if (canEditDraft) _ensureEditingControllers(contract);
+        if (canEditDraft) _ensureEditingState(contract);
 
         final customerAsync = ref.watch(customerByIdProvider(contract.customerId));
         final propertyAsync = ref.watch(propertyByIdProvider(contract.propertyId));
-        final customerName = customerAsync.value?.displayName ?? contract.customerId;
-        final propertyName = propertyAsync.value?.name ?? contract.propertyId;
+        final customer = customerAsync.value;
+        final property = propertyAsync.value;
 
         return Scaffold(
           appBar: AppBar(
@@ -166,7 +147,9 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
                 key: const Key('exportContractPdfButton'),
                 icon: const Icon(Icons.picture_as_pdf_outlined),
                 tooltip: 'Export PDF',
-                onPressed: _busy ? null : () => _run(() => _exportPdf(contract, customerName, propertyName)),
+                onPressed: (_busy || customer == null || property == null)
+                    ? null
+                    : () => _run(() => _exportPdf(contract, customer, property)),
               ),
             ],
           ),
@@ -286,66 +269,66 @@ class _ContractDetailScreenState extends ConsumerState<ContractDetailScreen> {
                 ],
               ),
               const SizedBox(height: 8),
-              for (final clause in contract.clauses)
-                Card(
-                  key: Key('contractDetailClauseCard_${clause.id}'),
-                  margin: const EdgeInsets.only(bottom: 12),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                                child: Text(clause.title, style: Theme.of(context).textTheme.titleSmall)),
-                            if (clause.isLocked)
-                              Icon(
-                                Icons.lock_outline,
-                                size: 16,
-                                // Still shows locked, but a flagged clause is
-                                // editable below despite the icon — greyed
-                                // out to hint it's not really blocking here.
-                                color: _isClauseEditable(clause)
-                                    ? Theme.of(context).colorScheme.onSurfaceVariant
-                                    : null,
-                              ),
-                            if (clause.reviewStatus == ClauseReviewStatus.needsRevision)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 6),
-                                child: Icon(
-                                  Icons.flag,
+              if (canEditDraft) ...[
+                LeaseTermsFormSection(
+                  initial: _editedLeaseTerms,
+                  onChanged: (terms) => _editedLeaseTerms = terms,
+                ),
+                const SizedBox(height: 20),
+                ContractClauseListField(
+                  key: ValueKey('contract-detail-clauses-${contract.id}-${contract.updatedAt}'),
+                  initialClauses: _editedClauses,
+                  onChanged: (clauses) => _editedClauses = clauses,
+                  isClauseEditable: _isClauseEditable,
+                ),
+              ] else
+                for (final clause in contract.clauses)
+                  Card(
+                    key: Key('contractDetailClauseCard_${clause.id}'),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                  child: Text(clause.title, style: Theme.of(context).textTheme.titleSmall)),
+                              if (clause.isLocked)
+                                Icon(
+                                  Icons.lock_outline,
                                   size: 16,
-                                  color: AppStatusColors.of(context).onWarningContainer,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        if (canEditDraft && _isClauseEditable(clause))
-                          TextFormField(
-                            key: Key('contractDetailClauseField_${clause.id}'),
-                            controller: _clauseControllers[clause.id],
-                            maxLines: 3,
-                            decoration: const InputDecoration(labelText: 'Content'),
-                          )
-                        else
-                          Text(clause.content),
-                        if (clause.reviewStatus == ClauseReviewStatus.needsRevision &&
-                            clause.rejectionNote != null) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            'Needs revision: ${clause.rejectionNote}',
-                            style: TextStyle(
-                              color: AppStatusColors.of(context).onWarningContainer,
-                              fontStyle: FontStyle.italic,
-                            ),
+                              if (clause.reviewStatus == ClauseReviewStatus.needsRevision)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 6),
+                                  child: Icon(
+                                    Icons.flag,
+                                    size: 16,
+                                    color: AppStatusColors.of(context).onWarningContainer,
+                                  ),
+                                ),
+                            ],
                           ),
+                          const SizedBox(height: 8),
+                          Text(clause.content),
+                          if (clause.reviewStatus == ClauseReviewStatus.needsRevision &&
+                              clause.rejectionNote != null) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'Needs revision: ${clause.rejectionNote}',
+                              style: TextStyle(
+                                color: AppStatusColors.of(context).onWarningContainer,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
-                ),
               const SizedBox(height: 16),
               if (canEditDraft)
                 OutlinedButton(

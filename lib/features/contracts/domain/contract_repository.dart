@@ -1,5 +1,6 @@
 import 'contract.dart';
 import 'contract_clause.dart';
+import 'lease_terms.dart';
 import 'rejection.dart';
 
 abstract class ContractRepository {
@@ -13,16 +14,19 @@ abstract class ContractRepository {
     required List<ContractClause> clauses,
     required String createdBy,
     String? sourceQuotationId,
+    LeaseTerms leaseTerms = const LeaseTerms(),
   });
 
   /// Saves edits to a Draft the caller owns: clause content always, and
-  /// optionally which customer/property this contract is for (template/
-  /// version stay fixed once created — see Contract's own doc comment).
+  /// optionally which customer/property/lease terms this contract is for
+  /// (template/version stay fixed once created — see Contract's own doc
+  /// comment).
   Future<void> updateDraft(
     String id,
     List<ContractClause> clauses, {
     String? customerId,
     String? propertyId,
+    LeaseTerms? leaseTerms,
   });
 
   /// DRAFT -> PENDING_APPROVAL (TDD §23 Submit).

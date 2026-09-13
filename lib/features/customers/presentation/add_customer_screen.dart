@@ -23,6 +23,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
   late final TextEditingController _nameController;
   late final TextEditingController _emiratesIdController;
   late final TextEditingController _passportController;
+  late final TextEditingController _tradeNameController;
   late final TextEditingController _tradeLicenseController;
   late final TextEditingController _licensingAuthorityController;
   late final TextEditingController _phoneController;
@@ -44,6 +45,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
     );
     _emiratesIdController = TextEditingController(text: existing?.individual?.emiratesId ?? '');
     _passportController = TextEditingController(text: existing?.individual?.passportNumber ?? '');
+    _tradeNameController = TextEditingController(text: existing?.individual?.tradeName ?? '');
     _tradeLicenseController = TextEditingController(text: existing?.company?.tradeLicenseNumber ?? '');
     _licensingAuthorityController = TextEditingController(text: existing?.company?.licensingAuthority ?? '');
     _phoneController = TextEditingController(text: existing?.contact.phone ?? '');
@@ -56,6 +58,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
     _nameController.dispose();
     _emiratesIdController.dispose();
     _passportController.dispose();
+    _tradeNameController.dispose();
     _tradeLicenseController.dispose();
     _licensingAuthorityController.dispose();
     _phoneController.dispose();
@@ -85,6 +88,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
                 fullName: _nameController.text.trim(),
                 emiratesId: _emptyToNull(_emiratesIdController.text),
                 passportNumber: _emptyToNull(_passportController.text),
+                tradeName: _emptyToNull(_tradeNameController.text),
               )
             : null,
         company: _type == CustomerType.company
@@ -158,6 +162,12 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
                 key: const Key('passportField'),
                 controller: _passportController,
                 decoration: const InputDecoration(labelText: 'Passport Number'),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                key: const Key('tradeNameField'),
+                controller: _tradeNameController,
+                decoration: const InputDecoration(labelText: 'Trade Name (optional)'),
               ),
             ] else ...[
               TextFormField(

@@ -25,6 +25,7 @@ class FirestoreCustomerRepository implements CustomerRepository {
               fullName: individualData['fullName'] as String? ?? '',
               emiratesId: individualData['emiratesId'] as String?,
               passportNumber: individualData['passportNumber'] as String?,
+              tradeName: individualData['tradeName'] as String?,
             ),
       company: companyData == null
           ? null
@@ -53,6 +54,7 @@ class FirestoreCustomerRepository implements CustomerRepository {
                 'fullName': customer.individual!.fullName,
                 'emiratesId': customer.individual!.emiratesId,
                 'passportNumber': customer.individual!.passportNumber,
+                'tradeName': customer.individual!.tradeName,
               },
         'company': customer.company == null
             ? null

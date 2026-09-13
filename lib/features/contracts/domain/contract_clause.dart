@@ -26,11 +26,16 @@ String clauseReviewStatusToString(ClauseReviewStatus status) {
   }
 }
 
+/// Bilingual (Ar/En) clause copied onto a contract from a [TemplateClause]
+/// (see that class's doc comment for the placeholder/rendering model, which
+/// applies identically here) — same shape plus the approval-workflow fields.
 class ContractClause {
   final String id;
   final int order;
-  final String title;
-  final String content;
+  final String titleAr;
+  final String titleEn;
+  final String contentAr;
+  final String contentEn;
   final bool isLocked;
   final ClauseReviewStatus reviewStatus;
   final String? rejectionNote;
@@ -38,10 +43,19 @@ class ContractClause {
   const ContractClause({
     required this.id,
     required this.order,
-    required this.title,
-    required this.content,
+    required this.titleAr,
+    required this.titleEn,
+    required this.contentAr,
+    required this.contentEn,
     this.isLocked = false,
     this.reviewStatus = ClauseReviewStatus.pending,
     this.rejectionNote,
   });
+
+  /// Back-compat accessor for display-only call sites written before the
+  /// bilingual split — prefers English, falls back to Arabic.
+  String get title => titleEn.isNotEmpty ? titleEn : titleAr;
+
+  /// Back-compat accessor, see [title].
+  String get content => contentEn.isNotEmpty ? contentEn : contentAr;
 }

@@ -5,6 +5,7 @@ import '../../notifications/domain/notification.dart';
 import '../domain/contract.dart';
 import '../domain/contract_clause.dart';
 import '../domain/contract_repository.dart';
+import '../domain/lease_terms.dart';
 import '../domain/rejection.dart';
 
 class FirestoreContractRepository implements ContractRepository {
@@ -24,8 +25,14 @@ class FirestoreContractRepository implements ContractRepository {
   Map<String, dynamic> _clauseToMap(ContractClause clause) => {
         'id': clause.id,
         'order': clause.order,
-        'title': clause.title,
-        'content': clause.content,
+        'titleAr': clause.titleAr,
+        'titleEn': clause.titleEn,
+        'contentAr': clause.contentAr,
+        'contentEn': clause.contentEn,
+        // Kept alongside the bilingual fields for one release — see
+        // FirestoreTemplateRepository._clauseToMap's identical comment.
+        'title': clause.titleEn,
+        'content': clause.contentEn,
         'isLocked': clause.isLocked,
         'reviewStatus': clauseReviewStatusToString(clause.reviewStatus),
         'rejectionNote': clause.rejectionNote,
@@ -34,12 +41,48 @@ class FirestoreContractRepository implements ContractRepository {
   ContractClause _clauseFromMap(Map<String, dynamic> map) => ContractClause(
         id: map['id'] as String? ?? '',
         order: (map['order'] as num?)?.toInt() ?? 0,
-        title: map['title'] as String? ?? '',
-        content: map['content'] as String? ?? '',
+        titleEn: map['titleEn'] as String? ?? map['title'] as String? ?? '',
+        titleAr: map['titleAr'] as String? ?? '',
+        contentEn: map['contentEn'] as String? ?? map['content'] as String? ?? '',
+        contentAr: map['contentAr'] as String? ?? '',
         isLocked: map['isLocked'] as bool? ?? false,
         reviewStatus: clauseReviewStatusFromString(map['reviewStatus'] as String? ?? 'PENDING'),
         rejectionNote: map['rejectionNote'] as String?,
       );
+
+  Map<String, dynamic> _leaseTermsToMap(LeaseTerms terms) => {
+        'leasedPropertyType': terms.leasedPropertyType.name,
+        'buildingName': terms.buildingName,
+        'commencementDate':
+            terms.commencementDate == null ? null : Timestamp.fromDate(terms.commencementDate!),
+        'expiryDate': terms.expiryDate == null ? null : Timestamp.fromDate(terms.expiryDate!),
+        'yearlyRentAmount': terms.yearlyRentAmount,
+        'purposeOfUsage': terms.purposeOfUsage,
+        'paymentMode': terms.paymentMode.name,
+        'numberOfCheques': terms.numberOfCheques,
+        'insuranceAllowance': terms.insuranceAllowance,
+        'managementFeeAmount': terms.managementFeeAmount,
+        'vatAmount': terms.vatAmount,
+        'numberOfCoOccupants': terms.numberOfCoOccupants,
+      };
+
+  LeaseTerms _leaseTermsFromMap(Map<String, dynamic>? map) {
+    if (map == null) return LeaseTerms.empty();
+    return LeaseTerms(
+      leasedPropertyType: leasedPropertyTypeFromString(map['leasedPropertyType'] as String? ?? 'room'),
+      buildingName: map['buildingName'] as String?,
+      commencementDate: (map['commencementDate'] as Timestamp?)?.toDate(),
+      expiryDate: (map['expiryDate'] as Timestamp?)?.toDate(),
+      yearlyRentAmount: (map['yearlyRentAmount'] as num?)?.toDouble(),
+      purposeOfUsage: map['purposeOfUsage'] as String?,
+      paymentMode: paymentModeFromString(map['paymentMode'] as String? ?? 'cheques'),
+      numberOfCheques: (map['numberOfCheques'] as num?)?.toInt(),
+      insuranceAllowance: (map['insuranceAllowance'] as num?)?.toDouble(),
+      managementFeeAmount: (map['managementFeeAmount'] as num?)?.toDouble(),
+      vatAmount: (map['vatAmount'] as num?)?.toDouble(),
+      numberOfCoOccupants: (map['numberOfCoOccupants'] as num?)?.toInt(),
+    );
+  }
 
   Rejection? _rejectionFromMap(Map<String, dynamic>? map) {
     if (map == null) return null;
@@ -74,6 +117,7 @@ class FirestoreContractRepository implements ContractRepository {
       templateId: data['templateId'] as String? ?? '',
       templateVersion: (data['templateVersion'] as num?)?.toInt() ?? 1,
       clauses: clauses,
+      leaseTerms: _leaseTermsFromMap((data['leaseTerms'] as Map?)?.cast<String, dynamic>()),
       createdBy: data['createdBy'] as String? ?? '',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
@@ -137,6 +181,7 @@ class FirestoreContractRepository implements ContractRepository {
     required List<ContractClause> clauses,
     required String createdBy,
     String? sourceQuotationId,
+    LeaseTerms leaseTerms = const LeaseTerms(),
   }) async {
     final year = DateTime.now().year;
     final counterRef = _firestore.collection('counters').doc('contracts_$year');
@@ -173,6 +218,7 @@ class FirestoreContractRepository implements ContractRepository {
       'propertySnapshot': null,
       'financialSnapshot': null,
       'clauses': clauses.map(_clauseToMap).toList(),
+      'leaseTerms': _leaseTermsToMap(leaseTerms),
       'createdBy': createdBy,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
@@ -205,6 +251,7 @@ class FirestoreContractRepository implements ContractRepository {
       templateId: templateId,
       templateVersion: templateVersion,
       clauses: clauses,
+      leaseTerms: leaseTerms,
       createdBy: createdBy,
     );
   }
@@ -215,9 +262,11 @@ class FirestoreContractRepository implements ContractRepository {
     List<ContractClause> clauses, {
     String? customerId,
     String? propertyId,
+    LeaseTerms? leaseTerms,
   }) async {
     await _contracts.doc(id).update({
       'clauses': clauses.map(_clauseToMap).toList(),
+      if (leaseTerms != null) 'leaseTerms': _leaseTermsToMap(leaseTerms),
       if (customerId != null) 'customerId': customerId,
       if (propertyId != null) 'propertyId': propertyId,
       'updatedAt': FieldValue.serverTimestamp(),
