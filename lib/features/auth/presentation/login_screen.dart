@@ -128,7 +128,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   builder: (_) => const SignUpScreen(),
                                 ),
                               ),
-                      child: const Text("Don't have an account? Sign Up"),
+                      child: const Text("Don't have an account? Sign Up / إنشاء حساب"),
                     ),
                     if (_googleSignInSupported) ...[
                       const SizedBox(height: AppSpacing.sm),

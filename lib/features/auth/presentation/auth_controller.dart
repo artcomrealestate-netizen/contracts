@@ -38,9 +38,12 @@ class AuthController extends AsyncNotifier<AppUser?> {
     }
     if (profile.status == AccountStatus.pending) {
       await authRepository.signOut();
+      // Requested verbatim (see the self-signup feature request): this one
+      // message is Arabic while every other AuthController message stays
+      // English, matching the rest of the auth feature's convention.
       throw const AppException(
         AppErrorCode.permissionDenied,
-        'Your account is pending admin approval.',
+        'حسابك بانتظار موافقة الأدمن.',
       );
     }
     if (!profile.isActive) {

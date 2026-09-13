@@ -5,7 +5,7 @@ const {
   assertSucceeds,
   assertFails,
 } = require('@firebase/rules-unit-testing');
-const { doc, getDoc, setDoc, updateDoc } = require('firebase/firestore');
+const { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs } = require('firebase/firestore');
 
 // Mirrors docs/Contract_System_TDD_v1.1_EN.md §40: rules must enforce
 // authentication, active status, and role — "request.auth != null" alone is
@@ -73,9 +73,15 @@ describe('users/{userId} rules', () => {
     await assertFails(getDoc(doc(db, 'users', OTHER_EMPLOYEE)));
   });
 
-  it('a disabled account cannot read even its own profile', async () => {
+  it('a disabled account can still read its own profile (to see why it is blocked), but cannot update it', async () => {
     const db = testEnv.authenticatedContext(DISABLED_EMPLOYEE).firestore();
-    await assertFails(getDoc(doc(db, 'users', DISABLED_EMPLOYEE)));
+    await assertSucceeds(getDoc(doc(db, 'users', DISABLED_EMPLOYEE)));
+    await assertFails(updateDoc(doc(db, 'users', DISABLED_EMPLOYEE), { displayName: 'x' }));
+  });
+
+  it('a disabled account still cannot read another user\'s profile', async () => {
+    const db = testEnv.authenticatedContext(DISABLED_EMPLOYEE).firestore();
+    await assertFails(getDoc(doc(db, 'users', OTHER_EMPLOYEE)));
   });
 
   it('an unauthenticated request is denied', async () => {
@@ -168,13 +174,33 @@ describe('self-signup create rule', () => {
     );
   });
 
-  it('a pending account cannot read or update itself once created', async () => {
+  it('a pending account can read its own profile (needed for the "pending approval" message) but cannot update it', async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), 'users', NEW_SIGNUP), pendingProfile());
     });
     const db = testEnv.authenticatedContext(NEW_SIGNUP).firestore();
-    await assertFails(getDoc(doc(db, 'users', NEW_SIGNUP)));
+    await assertSucceeds(getDoc(doc(db, 'users', NEW_SIGNUP)));
     await assertFails(updateDoc(doc(db, 'users', NEW_SIGNUP), { displayName: 'Trying to edit' }));
+  });
+
+  it('a pending account still cannot read another user\'s profile', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users', NEW_SIGNUP), pendingProfile());
+    });
+    const db = testEnv.authenticatedContext(NEW_SIGNUP).firestore();
+    await assertFails(getDoc(doc(db, 'users', OTHER_EMPLOYEE)));
+  });
+
+  it('a brand-new Auth account with no profile doc at all gets "not found", not permission-denied, on its own read', async () => {
+    // Regression check for the bug live-testing caught: isActive()-gating a
+    // self-read makes get() error-evaluate (and so deny) for a doc that
+    // doesn't exist yet, which AuthController._loadActiveProfile can't tell
+    // apart from a real permission error.
+    const db = testEnv.authenticatedContext('uid-with-no-profile').firestore();
+    const snap = await assertSucceeds(getDoc(doc(db, 'users', 'uid-with-no-profile')));
+    if (snap.exists()) {
+      throw new Error('expected no profile document to exist');
+    }
   });
 
   it('an admin can approve a pending account', async () => {
@@ -189,6 +215,28 @@ describe('self-signup create rule', () => {
         permissions: { 'customer.read': true },
       })
     );
+  });
+
+  it('an admin can query the pending-users list (Pending Users screen)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users', NEW_SIGNUP), pendingProfile());
+    });
+    const db = testEnv.authenticatedContext(ADMIN).firestore();
+    const snapshot = await assertSucceeds(
+      getDocs(query(collection(db, 'users'), where('status', '==', 'pending')))
+    );
+    const ids = snapshot.docs.map((d) => d.id);
+    if (!ids.includes(NEW_SIGNUP)) {
+      throw new Error(`expected pending-users query to include ${NEW_SIGNUP}, got: ${ids}`);
+    }
+  });
+
+  it('a non-admin cannot query the pending-users list', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users', NEW_SIGNUP), pendingProfile());
+    });
+    const db = testEnv.authenticatedContext(ACTIVE_EMPLOYEE).firestore();
+    await assertFails(getDocs(query(collection(db, 'users'), where('status', '==', 'pending'))));
   });
 
   it('an admin can reject a pending account by disabling it', async () => {

@@ -114,7 +114,7 @@ void main() {
       expect(state.hasError, isTrue);
       final error = state.error as AppException;
       expect(error.code, AppErrorCode.permissionDenied);
-      expect(error.message, contains('pending'));
+      expect(error.message, contains('موافقة الأدمن'));
       expect(authRepo.signOutCalls, 1);
     });
 
@@ -139,7 +139,7 @@ void main() {
       expect(state.hasError, isTrue);
       final error = state.error as AppException;
       expect(error.code, AppErrorCode.permissionDenied);
-      expect(error.message, contains('pending'));
+      expect(error.message, contains('موافقة الأدمن'));
       // The Firestore profile was created with no access at all, and the
       // Auth session was signed back out (mirrors _loadActiveProfile).
       final created = userRepo.usersByUid.values.single;

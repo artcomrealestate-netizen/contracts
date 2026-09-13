@@ -39,7 +39,15 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if isAdmin() || (isOwnUserDoc(userId) && isActive());
+      // A user can always read their OWN doc, active or not — otherwise a
+      // pending/suspended/disabled account can never discover *why* it's
+      // blocked (AuthController._loadActiveProfile reads this doc to decide
+      // which message to show) and a get() on a not-yet-created doc for a
+      // brand-new Auth account with no profile would itself evaluate-error
+      // and come back as permission-denied instead of "not found". No
+      // isActive() gate here is safe: this only ever exposes a user's own
+      // status/role/permissions to themselves, never another account's.
+      allow read: if isAdmin() || isOwnUserDoc(userId);
 
       // Self-signup: a signed-in user may create their own profile exactly
       // once, pinned to a powerless starting state (employee/pending/no

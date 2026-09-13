@@ -10,6 +10,7 @@ import '../../properties/presentation/properties_list_screen.dart';
 import '../../templates/presentation/templates_list_screen.dart';
 import '../domain/permission.dart';
 import 'auth_controller.dart';
+import 'auth_providers.dart';
 import 'pending_users_screen.dart';
 
 /// Landing screen for the auth-gated Contract System module — see
@@ -121,15 +122,31 @@ class ContractsHomeScreen extends ConsumerWidget {
                     ),
                   ),
                 if (user?.hasPermission(Permission.userManage) ?? false)
-                  ListTile(
-                    key: const Key('pendingUsersMenuTile'),
-                    leading: const Icon(Icons.person_add_alt_outlined),
-                    title: const Text('Pending Users'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const PendingUsersScreen()),
-                    ),
-                  ),
+                  Builder(builder: (context) {
+                    // A live badge so an admin sees new signups without
+                    // having to open this screen speculatively — no
+                    // firestore.rules change needed, since admins can
+                    // already query the users collection (unlike routing
+                    // this through the shared notifications collection,
+                    // which would need letting an unapproved, zero-
+                    // permission signup write to it).
+                    final pendingCount = ref
+                        .watch(pendingUsersStreamProvider)
+                        .maybeWhen(data: (list) => list.length, orElse: () => 0);
+                    return ListTile(
+                      key: const Key('pendingUsersMenuTile'),
+                      leading: Badge(
+                        label: Text('$pendingCount'),
+                        isLabelVisible: pendingCount > 0,
+                        child: const Icon(Icons.person_add_alt_outlined),
+                      ),
+                      title: const Text('Pending Users / الحسابات المعلّقة'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const PendingUsersScreen()),
+                      ),
+                    );
+                  }),
               ],
             ),
           ),
